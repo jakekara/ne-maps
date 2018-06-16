@@ -8,7 +8,7 @@ import { isNewEnglandFips } from "./new-england.js";
 
 console.log("Hello, from index.js!");
 
-d3.json("shapes/us_counties.topo.json")
+d3.json("shapes/us-2017.json")
     .then(function(topodata){
 
 	console.log("topodata", topodata);	
@@ -16,15 +16,16 @@ d3.json("shapes/us_counties.topo.json")
 	var width = 300,
 	    height = width * 1.34;
 
-	var counties = topodata.objects.cb_2017_us_county_20m;
+	var counties = topodata.objects.counties// cb_2017_us_county_20m;
+	var states = topodata.objects.states
 
 	var newEnglandFilter = function(d){
-	    return isNewEnglandFips(d.properties.STATEFP);
+	    return isNewEnglandFips(d.id.slice(0,2));
 	}
 
 	var allFilter = function(_){ return true; };
 
-	var ctFilter = function(d){ return d.properties.STATEFP === "09"; }
+	// var ctFilter = function(d){ return d.properties.STATEFP === "09"; }
 
 	var neProjection = d3.geoMercator()
 	    .fitSize([width, height],
@@ -33,16 +34,16 @@ d3.json("shapes/us_counties.topo.json")
 				   newEnglandFilter));
 
 	var outlineContext = function(c, _){
-	    c.lineWidth = 0.3;
+	    c.lineWidth = 2;
 	    c.fillStyle = "rgba(0,0,0,0)";
-	    c.strokeStyle = "rgba(125,125,125,1)";
-	    c.lineWidth = 0;
+	    c.strokeStyle = "white";// rgba(255,255,255,1)";
+	    // c.lineWidth = 0;
 	    return c;
 	}
 
 	var colorContext =  function(c, d){
 
-	    c.lineWidth = 0;
+	    c.lineWidth = 0.3;
 
 	    var rand = Math.random()
 	    // c.fillStyle = d3.interpolateOranges(Math.random());
@@ -56,7 +57,11 @@ d3.json("shapes/us_counties.topo.json")
 	    
 	}
 
-	var newEnglandCounties = objectSubset(topodata, counties, newEnglandFilter);	
+	var newEnglandCounties = objectSubset(topodata, counties, newEnglandFilter);
+	var stateShapes = objectSubset(topodata, states, function(d){
+	    return isNewEnglandFips(d.id.slice(0,2));
+	})
+	
 	var c = new Choropleth()
 	    .width(width)
 	    .height(height)
@@ -67,6 +72,13 @@ d3.json("shapes/us_counties.topo.json")
 	    .init()	
 	    .drawChoropleth();
 
+
+	// var interiors = topojson.mesh(topodata, states,
+	// 			      function(a, b) { return a !== b; });
+	var interiors = topojson.mesh(topodata, states,
+				      function(a, b) { return a !== b; });
+	
+	c.drawObjects([interiors], outlineContext);
 	// c.drawObjects(newEnglandCounties, colorContext);
 
 	// new NoiseMaker(c.canvas).draw(0.25);
@@ -78,7 +90,7 @@ d3.json("shapes/us_counties.topo.json")
 		message.html("");
 		return;
 	    }
-	    message.html(countyList[0].properties.NAME);
+	    message.html(countyList[0].id)// properties.NAME);
 	}, newEnglandCounties);
 
 

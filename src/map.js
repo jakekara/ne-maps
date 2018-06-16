@@ -19,16 +19,17 @@ class Map {
 	this.container().html("");
 
 	// retina
-	var devicePixelRatio = window.devicePixelRatio || 1;
+	this.devicePixelRatio = window.devicePixelRatio || 1;
+	console.log("dpr", this.devicePixelRatio);
 
 	this.canvas = this.container().append("canvas")
-	    .attr("width", this.width() * devicePixelRatio)
-	    .attr("height", this.height() * devicePixelRatio)
+	    .attr("width", this.width() * this.devicePixelRatio)
+	    .attr("height", this.height() * this.devicePixelRatio)
 	    .style("width", this.width() + "px")
 	    .style("height", this.height() + "px").node();
 
 	this.context = this.canvas.getContext("2d");
-	this.context.scale(devicePixelRatio, devicePixelRatio);
+	this.context.scale(this.devicePixelRatio, this.devicePixelRatio);
 
 	this.path = d3.geoPath()
 	    .projection(this.projection())
