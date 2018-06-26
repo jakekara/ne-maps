@@ -60,13 +60,21 @@ Promise.all([d3.json("shapes/us-2017.json"),
 	// data = data.filter(function(a){
 	//     console.log("is new england fips?", a[id_col].substring(0,2))
 	//     return isNewEnglandFips(a[id_col].substring(0,2))
-	// }); 
+	// });
 
 	var rateExtent = d3.extent(data.map( d => Number(d[data_col]) ));
 
-	var rateScale = d3.scaleLog()
-	    .domain(rateExtent)
+	// rateExtent = [0, 500];
+	console.log("rateExtent", rateExtent);
+
+	var rateScale = d3.scaleLinear()
+	// .domain(rateExtent)
+	    .domain([0, 1000])
 	    .range([0,1]);
+
+	var valScale = function(val){
+	    return d3.interpolateReds(rateScale(val));
+	}
 
 	var rate = function (geoid){
 	    var ret =  getData(geoid)[data_col] || "#fff";
@@ -85,10 +93,11 @@ Promise.all([d3.json("shapes/us-2017.json"),
 	    var placeData = getData(d.id) || {};
 	    var placeRate = Number(placeData[data_col]) || -1;
 
-	    var val = rateScale(placeRate);
+	    // var val = rateScale(placeRate);
 	    // val = rateScale(500);// getRate(d.GEOID));
 	    
-	    var color =  d3.interpolateReds(val);
+	    // var color =  d3.interpolateReds(val);
+	    var color = valScale(placeRate);
 
 	    if (placeRate === -1){ color = "#fff"; }
 	    
@@ -139,5 +148,46 @@ Promise.all([d3.json("shapes/us-2017.json"),
 	    console.log(getData(countyList[0].id));
 	}, newEnglandCounties);
 
+	// Draw a legend
+	const legend_width = width,
+	      legend_steps = 100,
+	      legend_height = 40;
 
+	var legend_svg = d3.select("#container")
+	    .append("svg")
+	    .attr("width", legend_width)
+	    .attr("height", legend_height);
+	
+	var legend = legend_svg
+	    .append("g")
+	    .classed("legend", true)
+	    .attr("width", legend_width)
+	    .attr("height", legend_height)
+	    .attr("transform", "translate(0," + legend_height / 2 + ")")
+	
+	var legend_scale = d3.scaleLinear()
+	    .range([10, legend_width - 10])
+	// .domain([0,rateExtent[1]])
+	    .domain([0, 1000]);
+
+	var legend_axis = d3.axisBottom()
+	    .scale(legend_scale)
+
+	var legend_rects = legend_svg.append("g").selectAll("rect")
+	    .data(d3.range(0,legend_steps))
+	    .enter()
+	    .append("rect")
+	    .attr("width", legend_width / legend_steps)
+	    .attr("height", legend_height / 2)
+	    .attr("x", function(v, i){ return 10 +  i * ((legend_width - 20) / legend_steps);})
+	    .style("fill", function(v, i){
+		return  d3.interpolateReds(i / legend_steps);
+	    })
+	    .style("stroke", function(v, i){
+		return  d3.interpolateReds(i / legend_steps);
+	    });
+	
+	
+	legend.call(legend_axis)
+	
     });
