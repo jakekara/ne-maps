@@ -1,7 +1,11 @@
-@import url('https://fonts.googleapis.com/css?family=Lato');
+@import url('https://fonts.googleapis.com/css?family=Lato:400,700');
 
 *{
     font-family: 'Lato', sans-serif;
+}
+
+body{
+    margin: 0px;
 }
 
 .side-by-side{
@@ -13,9 +17,16 @@
     
 }
 
+.choropleth-legend{
+    width: 90%;
+    margin-right: auto;
+    margin-left: auto;
+}
+
 .choropleth .title,
 .legend-title{
     font-size: 12px;
+    font-weight: 700;
 }
 
 

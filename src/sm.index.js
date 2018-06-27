@@ -38,11 +38,18 @@ var drawWithData = function(args){
 	}
 
     const container = d3.select("#container").html("");
-	
-	const legend_width = width,
+
+
+    var mapBox = container.append("div")
+	.classed("side-by-side", true);
+
+    var legend_container = container.append("div")
+	.classed("choropleth-legend", true)
+    
+    const legend_width = legend_container.node().getBoundingClientRect().width,
 	      legend_height = 40,
-	      legend_padding = 15,
-	      legend_steps = width,
+	      legend_padding = 20,
+	      legend_steps = Math.max(100, width / 4),
 	      legend_step_width = (legend_width - legend_padding * 2) / legend_steps;
 
 	// Draw the choropleths
@@ -103,9 +110,6 @@ var drawWithData = function(args){
 
 	}
 
-	var mapBox = container.append("div")
-	    .classed("side-by-side", true)
-
 	drawChoropleth(
 	    mapBox.append("div")
 		.classed("choropleth", true),
@@ -127,7 +131,8 @@ var drawWithData = function(args){
 	
 
 	// Draw the color legend
-	var legend_container = container.append("div")
+    // var legend_container = container.append("div")
+    // 	.classed("choropleth-legend", true)
 
     legend_container.append("div")
 	.classed("legend-title", true)
@@ -147,7 +152,7 @@ var drawWithData = function(args){
 	    .attr("width", legend_step_width)
 	    .attr("height", legend_height / 2)
 	    .attr("x", function(v, i){
-		return legend_padding + i * legend_step_width; 
+		return legend_padding + (i * legend_step_width); 
 	    })
 	    .attr("fill", function(v, i){
 		return color((v / legend_steps) * round_max);
@@ -159,7 +164,8 @@ var drawWithData = function(args){
 	// Create the axis
 	var legend_axis = d3.axisBottom()
 	    .tickSize(legend_height / 2)
-	    .tickValues(d3.range(0, 1600, 200))
+	    // .ticks(Math.min(Math.round(width / 50), 6))
+	    // .tickValues(d3.range(0, 1600, 200))
 	    .scale(valueScale([legend_padding, legend_width - legend_padding]))
 
 	legend_svg.append("g")
