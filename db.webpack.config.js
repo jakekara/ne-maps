@@ -3,14 +3,9 @@ const webpack = require('webpack');
 
 module.exports = {
     "mode":"production",
-    entry: {
-	index:'./src/index.js',
-	sm:'./src/sm.index.js',
-	pdisp:'./src/pdisp.index.js',
-	smlines:'./src/smlines.js'
-    },
+    entry: './src/sm.index.js',
     output: {
-	filename: '[name]-bundle.js',
+	filename: 'sm.bundle.js',
 	path: path.resolve(__dirname, 'js')
     }
 };

@@ -2,6 +2,7 @@
 
 *{
     font-family: 'Lato', sans-serif;
+    color: #555;
 }
 
 body{
@@ -23,17 +24,18 @@ body{
     margin-left: auto;
 }
 
+.small-chart .title,
 .choropleth .title,
 .legend-title{
     font-size: 12px;
     font-weight: 700;
 }
 
-
 .legend-title{
     text-align: right;
 }
 
+.small-chart .title,
 .choropleth .title {
     text-align: center;
 }
@@ -41,4 +43,103 @@ body{
 .map-legend svg .tick{
     stroke: white;
 
+}
+
+.dumbbell-plot .label {
+    font-size: 12px;
+    color: #555;
+}
+
+table.dumbbell-plot {
+    /* border-collapse: collapse; */
+}
+
+table.dumbbell-plot td {
+    vertical-align: top;
+}
+
+table.dumbbell-plot th,
+table.dumbbell-plot td{
+    padding: 0;
+}
+
+.dumbbell-plot .label.left {
+    text-align: right;
+}
+
+.dumbbell-plot svg circle {
+    stroke: #bbb;
+}
+
+.dumbbell-plot svg .throughline {
+    stroke: #bbb;
+    stroke-width: 0.5;
+}
+
+.legend-item{
+    display: flex;
+}
+
+.sourceline,
+.legend-item,
+.small-text {
+    font-size: 12px;
+}
+
+.legend-box{
+    border-radius: 50%;
+    margin-top: 1px;
+    width: 10px;
+    height: 10px;
+    border: 1px solid #bbb;
+    margin-right: 4px;
+}
+
+.line-chart path.plot {
+    /* fill: rgba(255,0,0,0.3); */
+    fill:none;
+    stroke-width: 2;
+}
+
+.small-chart {
+    padding-top: 19px;
+    padding: 12px;
+}
+.small-multiple-container{
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.left-graphic {
+    border-right: 1px solid #efefef;
+    
+    margin: 0px;
+
+    padding-top: 20px;
+    padding-bottom: 20px;
+    padding-right: 20px;
+}
+
+.center-graphic {
+    border-top: 1px solid #efefef;
+    border-bottom: 1px solid #efefef;
+
+    margin-top: 0px;
+    margin-bottom: 0px;
+
+    padding-top: 20px;
+    padding-bottom: 20px;
+}
+
+.legend-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.small-chart{
+    min-width: 25%;
+    box-sizing: border-box;
+    text-align: center;
 }

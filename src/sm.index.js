@@ -21,7 +21,8 @@ var drawWithData = function(args){
 				d3.max(data.map(a => Number(a.white)))]);
 
 	// Determine the next value rounded up 100
-	const round_max = Math.round(max_value / 100) * 100
+    const round_max = Math.round(max_value / 100) * 100
+    // const round_max = 1600;
 
 	// Generate a scale
 	const valueScale = function(range){
@@ -37,14 +38,28 @@ var drawWithData = function(args){
 	    return ret
 	}
 
-    const container = d3.select("#container").html("");
+    const container = d3.select("#container")
+	  .html("")
+	  .append("div")
+	  .classed("center-graphic", true)
 
+    var title = container.append("h7")
+	.text("HIV's uneven footprint");
+
+    var explainer = container.append("p")
+	.classed("small-text", true)
+	.text("HIV prevalence, the number of people living with HIV, varies "
+	      + " starkly along racial lines. Data from 2015.");
 
     var mapBox = container.append("div")
 	.classed("side-by-side", true);
 
     var legend_container = container.append("div")
 	.classed("choropleth-legend", true)
+
+    var sourceline = container.append("div")
+	.classed("sourceline", true)
+	.text("SOURCE: Centers for Disease Control");
     
     const legend_width = legend_container.node().getBoundingClientRect().width,
 	      legend_height = 40,
@@ -164,6 +179,11 @@ var drawWithData = function(args){
 	// Create the axis
 	var legend_axis = d3.axisBottom()
 	    .tickSize(legend_height / 2)
+	    .tickValues([0,
+			 Math.round(round_max * 0.25),
+			 Math.round(round_max / 2),
+			 Math.round(round_max * 0.75),
+			 round_max])
 	    // .ticks(Math.min(Math.round(width / 50), 6))
 	    // .tickValues(d3.range(0, 1600, 200))
 	    .scale(valueScale([legend_padding, legend_width - legend_padding]))
