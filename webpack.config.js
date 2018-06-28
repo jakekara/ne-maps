@@ -7,7 +7,8 @@ module.exports = {
 	index:'./src/index.js',
 	sm:'./src/sm.index.js',
 	pdisp:'./src/pdisp.index.js',
-	smlines:'./src/smlines.js'
+	smlines:'./src/smlines.js',
+	smbars:'./src/smbars.js'
     },
     output: {
 	filename: '[name]-bundle.js',
