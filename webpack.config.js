@@ -5,6 +5,7 @@ const webpack = require('webpack');
 
 module.exports = {
     "mode":"development",
+    devtool:"source-map",
     entry: {
 	index:["babel-polyfill",'./src/index.js'],
 	sm:["babel-polyfill",'./src/sm.index.js'],
