@@ -1,8 +1,10 @@
 const path = require('path');
 const webpack = require('webpack');
 
+// 
+
 module.exports = {
-    "mode":"production",
+    "mode":"development",
     entry: {
 	index:["babel-polyfill",'./src/index.js'],
 	sm:["babel-polyfill",'./src/sm.index.js'],
