@@ -39538,66 +39538,543 @@ module.exports = g;
 
 /***/ }),
 
+/***/ "./node_modules/whatwg-fetch/fetch.js":
+/*!********************************************!*\
+  !*** ./node_modules/whatwg-fetch/fetch.js ***!
+  \********************************************/
+/*! no static exports found */
+/***/ (function(module, exports) {
+
+(function(self) {
+  'use strict';
+
+  if (self.fetch) {
+    return
+  }
+
+  var support = {
+    searchParams: 'URLSearchParams' in self,
+    iterable: 'Symbol' in self && 'iterator' in Symbol,
+    blob: 'FileReader' in self && 'Blob' in self && (function() {
+      try {
+        new Blob()
+        return true
+      } catch(e) {
+        return false
+      }
+    })(),
+    formData: 'FormData' in self,
+    arrayBuffer: 'ArrayBuffer' in self
+  }
+
+  if (support.arrayBuffer) {
+    var viewClasses = [
+      '[object Int8Array]',
+      '[object Uint8Array]',
+      '[object Uint8ClampedArray]',
+      '[object Int16Array]',
+      '[object Uint16Array]',
+      '[object Int32Array]',
+      '[object Uint32Array]',
+      '[object Float32Array]',
+      '[object Float64Array]'
+    ]
+
+    var isDataView = function(obj) {
+      return obj && DataView.prototype.isPrototypeOf(obj)
+    }
+
+    var isArrayBufferView = ArrayBuffer.isView || function(obj) {
+      return obj && viewClasses.indexOf(Object.prototype.toString.call(obj)) > -1
+    }
+  }
+
+  function normalizeName(name) {
+    if (typeof name !== 'string') {
+      name = String(name)
+    }
+    if (/[^a-z0-9\-#$%&'*+.\^_`|~]/i.test(name)) {
+      throw new TypeError('Invalid character in header field name')
+    }
+    return name.toLowerCase()
+  }
+
+  function normalizeValue(value) {
+    if (typeof value !== 'string') {
+      value = String(value)
+    }
+    return value
+  }
+
+  // Build a destructive iterator for the value list
+  function iteratorFor(items) {
+    var iterator = {
+      next: function() {
+        var value = items.shift()
+        return {done: value === undefined, value: value}
+      }
+    }
+
+    if (support.iterable) {
+      iterator[Symbol.iterator] = function() {
+        return iterator
+      }
+    }
+
+    return iterator
+  }
+
+  function Headers(headers) {
+    this.map = {}
+
+    if (headers instanceof Headers) {
+      headers.forEach(function(value, name) {
+        this.append(name, value)
+      }, this)
+    } else if (Array.isArray(headers)) {
+      headers.forEach(function(header) {
+        this.append(header[0], header[1])
+      }, this)
+    } else if (headers) {
+      Object.getOwnPropertyNames(headers).forEach(function(name) {
+        this.append(name, headers[name])
+      }, this)
+    }
+  }
+
+  Headers.prototype.append = function(name, value) {
+    name = normalizeName(name)
+    value = normalizeValue(value)
+    var oldValue = this.map[name]
+    this.map[name] = oldValue ? oldValue+','+value : value
+  }
+
+  Headers.prototype['delete'] = function(name) {
+    delete this.map[normalizeName(name)]
+  }
+
+  Headers.prototype.get = function(name) {
+    name = normalizeName(name)
+    return this.has(name) ? this.map[name] : null
+  }
+
+  Headers.prototype.has = function(name) {
+    return this.map.hasOwnProperty(normalizeName(name))
+  }
+
+  Headers.prototype.set = function(name, value) {
+    this.map[normalizeName(name)] = normalizeValue(value)
+  }
+
+  Headers.prototype.forEach = function(callback, thisArg) {
+    for (var name in this.map) {
+      if (this.map.hasOwnProperty(name)) {
+        callback.call(thisArg, this.map[name], name, this)
+      }
+    }
+  }
+
+  Headers.prototype.keys = function() {
+    var items = []
+    this.forEach(function(value, name) { items.push(name) })
+    return iteratorFor(items)
+  }
+
+  Headers.prototype.values = function() {
+    var items = []
+    this.forEach(function(value) { items.push(value) })
+    return iteratorFor(items)
+  }
+
+  Headers.prototype.entries = function() {
+    var items = []
+    this.forEach(function(value, name) { items.push([name, value]) })
+    return iteratorFor(items)
+  }
+
+  if (support.iterable) {
+    Headers.prototype[Symbol.iterator] = Headers.prototype.entries
+  }
+
+  function consumed(body) {
+    if (body.bodyUsed) {
+      return Promise.reject(new TypeError('Already read'))
+    }
+    body.bodyUsed = true
+  }
+
+  function fileReaderReady(reader) {
+    return new Promise(function(resolve, reject) {
+      reader.onload = function() {
+        resolve(reader.result)
+      }
+      reader.onerror = function() {
+        reject(reader.error)
+      }
+    })
+  }
+
+  function readBlobAsArrayBuffer(blob) {
+    var reader = new FileReader()
+    var promise = fileReaderReady(reader)
+    reader.readAsArrayBuffer(blob)
+    return promise
+  }
+
+  function readBlobAsText(blob) {
+    var reader = new FileReader()
+    var promise = fileReaderReady(reader)
+    reader.readAsText(blob)
+    return promise
+  }
+
+  function readArrayBufferAsText(buf) {
+    var view = new Uint8Array(buf)
+    var chars = new Array(view.length)
+
+    for (var i = 0; i < view.length; i++) {
+      chars[i] = String.fromCharCode(view[i])
+    }
+    return chars.join('')
+  }
+
+  function bufferClone(buf) {
+    if (buf.slice) {
+      return buf.slice(0)
+    } else {
+      var view = new Uint8Array(buf.byteLength)
+      view.set(new Uint8Array(buf))
+      return view.buffer
+    }
+  }
+
+  function Body() {
+    this.bodyUsed = false
+
+    this._initBody = function(body) {
+      this._bodyInit = body
+      if (!body) {
+        this._bodyText = ''
+      } else if (typeof body === 'string') {
+        this._bodyText = body
+      } else if (support.blob && Blob.prototype.isPrototypeOf(body)) {
+        this._bodyBlob = body
+      } else if (support.formData && FormData.prototype.isPrototypeOf(body)) {
+        this._bodyFormData = body
+      } else if (support.searchParams && URLSearchParams.prototype.isPrototypeOf(body)) {
+        this._bodyText = body.toString()
+      } else if (support.arrayBuffer && support.blob && isDataView(body)) {
+        this._bodyArrayBuffer = bufferClone(body.buffer)
+        // IE 10-11 can't handle a DataView body.
+        this._bodyInit = new Blob([this._bodyArrayBuffer])
+      } else if (support.arrayBuffer && (ArrayBuffer.prototype.isPrototypeOf(body) || isArrayBufferView(body))) {
+        this._bodyArrayBuffer = bufferClone(body)
+      } else {
+        throw new Error('unsupported BodyInit type')
+      }
+
+      if (!this.headers.get('content-type')) {
+        if (typeof body === 'string') {
+          this.headers.set('content-type', 'text/plain;charset=UTF-8')
+        } else if (this._bodyBlob && this._bodyBlob.type) {
+          this.headers.set('content-type', this._bodyBlob.type)
+        } else if (support.searchParams && URLSearchParams.prototype.isPrototypeOf(body)) {
+          this.headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8')
+        }
+      }
+    }
+
+    if (support.blob) {
+      this.blob = function() {
+        var rejected = consumed(this)
+        if (rejected) {
+          return rejected
+        }
+
+        if (this._bodyBlob) {
+          return Promise.resolve(this._bodyBlob)
+        } else if (this._bodyArrayBuffer) {
+          return Promise.resolve(new Blob([this._bodyArrayBuffer]))
+        } else if (this._bodyFormData) {
+          throw new Error('could not read FormData body as blob')
+        } else {
+          return Promise.resolve(new Blob([this._bodyText]))
+        }
+      }
+
+      this.arrayBuffer = function() {
+        if (this._bodyArrayBuffer) {
+          return consumed(this) || Promise.resolve(this._bodyArrayBuffer)
+        } else {
+          return this.blob().then(readBlobAsArrayBuffer)
+        }
+      }
+    }
+
+    this.text = function() {
+      var rejected = consumed(this)
+      if (rejected) {
+        return rejected
+      }
+
+      if (this._bodyBlob) {
+        return readBlobAsText(this._bodyBlob)
+      } else if (this._bodyArrayBuffer) {
+        return Promise.resolve(readArrayBufferAsText(this._bodyArrayBuffer))
+      } else if (this._bodyFormData) {
+        throw new Error('could not read FormData body as text')
+      } else {
+        return Promise.resolve(this._bodyText)
+      }
+    }
+
+    if (support.formData) {
+      this.formData = function() {
+        return this.text().then(decode)
+      }
+    }
+
+    this.json = function() {
+      return this.text().then(JSON.parse)
+    }
+
+    return this
+  }
+
+  // HTTP methods whose capitalization should be normalized
+  var methods = ['DELETE', 'GET', 'HEAD', 'OPTIONS', 'POST', 'PUT']
+
+  function normalizeMethod(method) {
+    var upcased = method.toUpperCase()
+    return (methods.indexOf(upcased) > -1) ? upcased : method
+  }
+
+  function Request(input, options) {
+    options = options || {}
+    var body = options.body
+
+    if (input instanceof Request) {
+      if (input.bodyUsed) {
+        throw new TypeError('Already read')
+      }
+      this.url = input.url
+      this.credentials = input.credentials
+      if (!options.headers) {
+        this.headers = new Headers(input.headers)
+      }
+      this.method = input.method
+      this.mode = input.mode
+      if (!body && input._bodyInit != null) {
+        body = input._bodyInit
+        input.bodyUsed = true
+      }
+    } else {
+      this.url = String(input)
+    }
+
+    this.credentials = options.credentials || this.credentials || 'omit'
+    if (options.headers || !this.headers) {
+      this.headers = new Headers(options.headers)
+    }
+    this.method = normalizeMethod(options.method || this.method || 'GET')
+    this.mode = options.mode || this.mode || null
+    this.referrer = null
+
+    if ((this.method === 'GET' || this.method === 'HEAD') && body) {
+      throw new TypeError('Body not allowed for GET or HEAD requests')
+    }
+    this._initBody(body)
+  }
+
+  Request.prototype.clone = function() {
+    return new Request(this, { body: this._bodyInit })
+  }
+
+  function decode(body) {
+    var form = new FormData()
+    body.trim().split('&').forEach(function(bytes) {
+      if (bytes) {
+        var split = bytes.split('=')
+        var name = split.shift().replace(/\+/g, ' ')
+        var value = split.join('=').replace(/\+/g, ' ')
+        form.append(decodeURIComponent(name), decodeURIComponent(value))
+      }
+    })
+    return form
+  }
+
+  function parseHeaders(rawHeaders) {
+    var headers = new Headers()
+    // Replace instances of \r\n and \n followed by at least one space or horizontal tab with a space
+    // https://tools.ietf.org/html/rfc7230#section-3.2
+    var preProcessedHeaders = rawHeaders.replace(/\r?\n[\t ]+/g, ' ')
+    preProcessedHeaders.split(/\r?\n/).forEach(function(line) {
+      var parts = line.split(':')
+      var key = parts.shift().trim()
+      if (key) {
+        var value = parts.join(':').trim()
+        headers.append(key, value)
+      }
+    })
+    return headers
+  }
+
+  Body.call(Request.prototype)
+
+  function Response(bodyInit, options) {
+    if (!options) {
+      options = {}
+    }
+
+    this.type = 'default'
+    this.status = options.status === undefined ? 200 : options.status
+    this.ok = this.status >= 200 && this.status < 300
+    this.statusText = 'statusText' in options ? options.statusText : 'OK'
+    this.headers = new Headers(options.headers)
+    this.url = options.url || ''
+    this._initBody(bodyInit)
+  }
+
+  Body.call(Response.prototype)
+
+  Response.prototype.clone = function() {
+    return new Response(this._bodyInit, {
+      status: this.status,
+      statusText: this.statusText,
+      headers: new Headers(this.headers),
+      url: this.url
+    })
+  }
+
+  Response.error = function() {
+    var response = new Response(null, {status: 0, statusText: ''})
+    response.type = 'error'
+    return response
+  }
+
+  var redirectStatuses = [301, 302, 303, 307, 308]
+
+  Response.redirect = function(url, status) {
+    if (redirectStatuses.indexOf(status) === -1) {
+      throw new RangeError('Invalid status code')
+    }
+
+    return new Response(null, {status: status, headers: {location: url}})
+  }
+
+  self.Headers = Headers
+  self.Request = Request
+  self.Response = Response
+
+  self.fetch = function(input, init) {
+    return new Promise(function(resolve, reject) {
+      var request = new Request(input, init)
+      var xhr = new XMLHttpRequest()
+
+      xhr.onload = function() {
+        var options = {
+          status: xhr.status,
+          statusText: xhr.statusText,
+          headers: parseHeaders(xhr.getAllResponseHeaders() || '')
+        }
+        options.url = 'responseURL' in xhr ? xhr.responseURL : options.headers.get('X-Request-URL')
+        var body = 'response' in xhr ? xhr.response : xhr.responseText
+        resolve(new Response(body, options))
+      }
+
+      xhr.onerror = function() {
+        reject(new TypeError('Network request failed'))
+      }
+
+      xhr.ontimeout = function() {
+        reject(new TypeError('Network request failed'))
+      }
+
+      xhr.open(request.method, request.url, true)
+
+      if (request.credentials === 'include') {
+        xhr.withCredentials = true
+      } else if (request.credentials === 'omit') {
+        xhr.withCredentials = false
+      }
+
+      if ('responseType' in xhr && support.blob) {
+        xhr.responseType = 'blob'
+      }
+
+      request.headers.forEach(function(value, name) {
+        xhr.setRequestHeader(name, value)
+      })
+
+      xhr.send(typeof request._bodyInit === 'undefined' ? null : request._bodyInit)
+    })
+  }
+  self.fetch.polyfill = true
+})(typeof self !== 'undefined' ? self : this);
+
+
+/***/ }),
+
 /***/ "./src/accessor.js":
 /*!*************************!*\
   !*** ./src/accessor.js ***!
   \*************************/
-/*! exports provided: addAccessor, addAccessors, addDescribedAccessor, accessor */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "addAccessor", function() { return addAccessor; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "addAccessors", function() { return addAccessors; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "addDescribedAccessor", function() { return addDescribedAccessor; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "accessor", function() { return accessor; });
-const accessor = function(symb, v){
 
-    if (typeof(symb) !== "undefined") {
-	this[symb] = v;
+
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+var accessor = function accessor(symb, v) {
+
+    if (typeof symb !== "undefined") {
+        this[symb] = v;
     }
 
-    return function(v){
-	if (typeof(v) === "undefined") {
-	    return this[symb];
-	}
-	this[symb] = v;
-	return this;
-    }
-}
+    return function (v) {
+        if (typeof v === "undefined") {
+            return this[symb];
+        }
+        this[symb] = v;
+        return this;
+    };
+};
 
-const addAccessor = function(context, name, symbol, v){
+var addAccessor = function addAccessor(context, name, symbol, v) {
 
     context[name] = accessor.call(context, symbol, v);
-}
+};
 
-const addDescribedAccessor = function(context, description){
+var addDescribedAccessor = function addDescribedAccessor(context, description) {
 
     // context is required
-    
+
     // required
-    const name = description.name;
+    var name = description.name;
 
     // default symbol name
-    const symbol = description.symbol || "__" + name;
+    var symbol = description.symbol || "__" + name;
 
     // undefined is OK
-    const v = description.def;
+    var v = description.def;
 
     addAccessor(context, name, symbol, v);
-    
-}
+};
 
-const addAccessors = function(context, descriptions){
+var addAccessors = function addAccessors(context, descriptions) {
 
-    descriptions.forEach(desc => {
-	addDescribedAccessor(context, desc);
+    descriptions.forEach(function (desc) {
+        addDescribedAccessor(context, desc);
     });
-    
-}
+};
 
- 
-
+exports.addAccessor = addAccessor;
+exports.addAccessors = addAccessors;
+exports.addDescribedAccessor = addDescribedAccessor;
+exports.accessor = accessor;
 
 /***/ }),
 
@@ -39605,195 +40082,199 @@ const addAccessors = function(context, descriptions){
 /*!*************************!*\
   !*** ./src/barchart.js ***!
   \*************************/
-/*! exports provided: BarChart */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "BarChart", function() { return BarChart; });
-/* harmony import */ var d3__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
-/* harmony import */ var _plot_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./plot.js */ "./src/plot.js");
-/* harmony import */ var _data_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./data.js */ "./src/data.js");
-/* harmony import */ var _accessor_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./accessor.js */ "./src/accessor.js");
 
 
+Object.defineProperty(exports, "__esModule", {
+			value: true
+});
+exports.BarChart = undefined;
 
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
- 
+var _d = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
+
+var d3 = _interopRequireWildcard(_d);
+
+var _plot = __webpack_require__(/*! ./plot.js */ "./src/plot.js");
+
+var _data = __webpack_require__(/*! ./data.js */ "./src/data.js");
+
+var _accessor = __webpack_require__(/*! ./accessor.js */ "./src/accessor.js");
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) newObj[key] = obj[key]; } } newObj.default = obj; return newObj; } }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 /** Class representing a bar chart (techincally a column chart) */
-class BarChart {
+var BarChart = function () {
+			function BarChart(plot) {
+						_classCallCheck(this, BarChart);
 
-    constructor(plot){
+						this.plot = plot;
+						this.plot.xScale = d3.scaleBand();
 
-	this.plot = plot;
-	this.plot.xScale = d3__WEBPACK_IMPORTED_MODULE_0__["scaleBand"]();
-	
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_3__["addAccessors"])(this,
-		     [
-			 {name:"labelKey",def:"label"},
-			 {name:"valueKey",def:"value"},
-			 {name:"duration",def:0},
-			 {name:"animate",def:false},
-			 {name:"data", def:[]},
-			 {name:"ymax",def:null},
-		     ]);
+						(0, _accessor.addAccessors)(this, [{ name: "labelKey", def: "label" }, { name: "valueKey", def: "value" }, { name: "duration", def: 0 }, { name: "animate", def: false }, { name: "data", def: [] }, { name: "ymax", def: null }]);
+			}
 
-    }
-    
-    labels() {
-	return this.data().map(a => a[this.labelKey()]);
-    }
+			_createClass(BarChart, [{
+						key: "labels",
+						value: function labels() {
+									var _this = this;
 
-    values(){
-	return this.data().map(a => Number(a[this.valueKey()]));
-    }
+									return this.data().map(function (a) {
+												return a[_this.labelKey()];
+									});
+						}
+			}, {
+						key: "values",
+						value: function values() {
+									var _this2 = this;
 
-    /** get the index of the bar from mouse coordinates tuple */
-    getBarIndexFromCoords(coords){
-	return Math.round((
-	    coords[0]
-	    // - this.plot.margin().left
-		- this.plot.safeArea().left
-		// - this.plot.yAxisEl.node().getBBox().width
-	) / this.plot.xScale.bandwidth());
-    }
+									return this.data().map(function (a) {
+												return Number(a[_this2.valueKey()]);
+									});
+						}
 
-    /** return the ith bar as a d3 selection (zero-index) */
-    getBarAtIndex(i){
-	return 	this.plotArea.select("rect:nth-child(" + ( i + 1) + ")");
-    }
+						/** get the index of the bar from mouse coordinates tuple */
 
-    /** return all of the bars as a d3 selection */
-    getAllBars(){
-	// return this.bars;
-	return this.plotArea.selectAll("rect.bar");
-    }
+			}, {
+						key: "getBarIndexFromCoords",
+						value: function getBarIndexFromCoords(coords) {
+									return Math.round((coords[0]
+									// - this.plot.margin().left
+									- this.plot.safeArea().left
+									// - this.plot.yAxisEl.node().getBBox().width
+									) / this.plot.xScale.bandwidth());
+						}
 
-    // helper functions to be used for for drawing bars using general
-    // update pattern
-    drawBarsRemoveOld(){
-    }
+						/** return the ith bar as a d3 selection (zero-index) */
 
-    drawBarsUpdateCurrent(){
-    }
+			}, {
+						key: "getBarAtIndex",
+						value: function getBarAtIndex(i) {
+									return this.plotArea.select("rect:nth-child(" + (i + 1) + ")");
+						}
 
-    drawBarsAddNew(){
-    }
+						/** return all of the bars as a d3 selection */
 
-    drawBars(){
+			}, {
+						key: "getAllBars",
+						value: function getAllBars() {
+									// return this.bars;
+									return this.plotArea.selectAll("rect.bar");
+						}
 
-	this.bars = this.plotArea.selectAll(".bar")
-	    .data(this.data());
+						// helper functions to be used for for drawing bars using general
+						// update pattern
 
-	// exit
-	const old = this.bars.exit()
-	      // .transition()
-	      // .duration(this.duration())
-	      .remove()
+			}, {
+						key: "drawBarsRemoveOld",
+						value: function drawBarsRemoveOld() {}
+			}, {
+						key: "drawBarsUpdateCurrent",
+						value: function drawBarsUpdateCurrent() {}
+			}, {
+						key: "drawBarsAddNew",
+						value: function drawBarsAddNew() {}
+			}, {
+						key: "drawBars",
+						value: function drawBars() {
 
-	// update
-	var that = this;
-	
-	const barX = function(d){
-	    return that.plot.xScale(d[that.labelKey()]);
-	}
+									this.bars = this.plotArea.selectAll(".bar").data(this.data());
 
-	const barWidth = function(){
-	    return  that.plot.xScale.bandwidth(); };
+									// exit
+									var old = this.bars.exit()
+									// .transition()
+									// .duration(this.duration())
+									.remove();
 
-	const barY = function(d){
-	    return that.plot.yScale(d[that.valueKey()]);
-	}
+									// update
+									var that = this;
 
-	const barHeight = function(d){
+									var barX = function barX(d) {
+												return that.plot.xScale(d[that.labelKey()]);
+									};
 
-	    var ret =  that.plot.height()
-	    // - that.plot.margin().bottom
-	    // - that.plot.xAxisEl.node().getBBox().height
-		- that.plot.safeArea().bottom
-		- barY(d);
+									var barWidth = function barWidth() {
+												return that.plot.xScale.bandwidth();
+									};
 
-	    return ret;
-	}
+									var barY = function barY(d) {
+												return that.plot.yScale(d[that.valueKey()]);
+									};
 
+									var barHeight = function barHeight(d) {
 
-	// update
-	this.bars
-	    .transition()
-	    .duration(this.duration())
-	    .attr("height", barHeight)
-	    .attr("width", barWidth)
-	    .attr("x", barX)
-	    .attr("y", barY)
+												var ret = that.plot.height()
+												// - that.plot.margin().bottom
+												// - that.plot.xAxisEl.node().getBBox().height
+												- that.plot.safeArea().bottom - barY(d);
 
-	// add new
-	this.bars.enter()
-	    .append("rect")
-	    .classed("bar", true)
-	    .attr("height", barHeight)
-	    .attr("width", barWidth)
-	    .attr("x", barX)
-	    .attr("y", barY)
-    }
+												return ret;
+									};
 
-    initiateScales(){
-	this.plot.xScale = d3__WEBPACK_IMPORTED_MODULE_0__["scaleBand"]();
-	this.plot.yScale = d3__WEBPACK_IMPORTED_MODULE_0__["scaleLinear"]();
-    }
+									// update
+									this.bars.transition().duration(this.duration()).attr("height", barHeight).attr("width", barWidth).attr("x", barX).attr("y", barY);
 
-    updateRanges(){
-	this.plot.xScale
-	    .range([this.plot.safeArea().left,
-		    this.plot.width()
-		    - this.plot.safeArea().right])
+									// add new
+									this.bars.enter().append("rect").classed("bar", true).attr("height", barHeight).attr("width", barWidth).attr("x", barX).attr("y", barY);
+						}
+			}, {
+						key: "initiateScales",
+						value: function initiateScales() {
+									this.plot.xScale = d3.scaleBand();
+									this.plot.yScale = d3.scaleLinear();
+						}
+			}, {
+						key: "updateRanges",
+						value: function updateRanges() {
+									this.plot.xScale.range([this.plot.safeArea().left, this.plot.width() - this.plot.safeArea().right]);
 
-	this.plot.yScale
-	    .range([this.plot.height()
-		    - this.plot.safeArea().bottom,
-		    this.plot.safeArea().top])
-	
-    }
+									this.plot.yScale.range([this.plot.height() - this.plot.safeArea().bottom, this.plot.safeArea().top]);
+						}
+			}, {
+						key: "updateDomains",
+						value: function updateDomains() {
+									this.plot.xScale.domain(this.labels());
 
-    updateDomains(){
-	this.plot.xScale
-	    .domain(this.labels());
+									this.plot.yScale.domain([0, this.ymax() || d3.max(this.values())]);
 
-	this.plot.yScale
-	    .domain( [0, this.ymax() || d3__WEBPACK_IMPORTED_MODULE_0__["max"](this.values())])
+									// this.plot.xDomain = this.labels();
+									// this.plot.yDomain = [0, this.ymax() || d3.max(this.values())];
+						}
+			}, {
+						key: "predraw",
+						value: function predraw() {
 
-	// this.plot.xDomain = this.labels();
-	// this.plot.yDomain = [0, this.ymax() || d3.max(this.values())];
-	
-    }
+									this.initiateScales();
 
-    predraw(){
+									this.updateDomains();
 
-	this.initiateScales();
-	
-	this.updateDomains();
+									this.plot.draw();
 
-	this.plot.draw();
+									this.updateRanges();
+						}
+			}, {
+						key: "draw",
+						value: function draw() {
+									this.predraw();
 
-	this.updateRanges();
+									this.plotArea = this.plotArea || this.plot.svg.append("g");
 
-	
-    }
+									this.drawBars();
 
-    draw(){
-	this.predraw();
+									return this;
+						}
+			}]);
 
-	this.plotArea = this.plotArea || this.plot.svg.append("g");
-	
-	this.drawBars();
+			return BarChart;
+}();
 
-	return this;
-
-    }
-}
-
-
-
+exports.BarChart = BarChart;
 
 /***/ }),
 
@@ -39801,28 +40282,32 @@ class BarChart {
 /*!*********************!*\
   !*** ./src/data.js ***!
   \*********************/
-/*! exports provided: DataArray */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "DataArray", function() { return DataArray; });
-/* harmony import */ var _accessor_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./accessor.js */ "./src/accessor.js");
 
 
-const DataArray = function(data){
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+exports.DataArray = undefined;
 
-    this.data = Object(_accessor_js__WEBPACK_IMPORTED_MODULE_0__["addAccessor"])(this, "data", "__data", data);
-	
-}
+var _accessor = __webpack_require__(/*! ./accessor.js */ "./src/accessor.js");
+
+var DataArray = function DataArray(data) {
+
+    this.data = (0, _accessor.addAccessor)(this, "data", "__data", data);
+};
+
+exports.DataArray = DataArray;
 
 
-
-DataArray.prototype.getArrayFromKey = function(k){
-    return this.data().map(a => a[k]);
-}
-
-
+DataArray.prototype.getArrayFromKey = function (k) {
+    return this.data().map(function (a) {
+        return a[k];
+    });
+};
 
 /***/ }),
 
@@ -39830,68 +40315,85 @@ DataArray.prototype.getArrayFromKey = function(k){
 /*!*********************!*\
   !*** ./src/plot.js ***!
   \*********************/
-/*! exports provided: Plot */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Plot", function() { return Plot; });
-/* harmony import */ var d3__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
-/* harmony import */ var _accessor_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./accessor.js */ "./src/accessor.js");
 
+
+Object.defineProperty(exports, "__esModule", {
+	value: true
+});
+exports.Plot = undefined;
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 // var d3 = Object.assign({},
 // 		       require("d3-scale"),
 // 		       require("d3-selection")
 // 		      );
 
- 
+var _d = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
+
+var d3 = _interopRequireWildcard(_d);
+
+var _accessor = __webpack_require__(/*! ./accessor.js */ "./src/accessor.js");
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) newObj[key] = obj[key]; } } newObj.default = obj; return newObj; } }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 /** Class representing a plot */
-class Plot{
+var Plot = function () {
 
-    /** 
-     * Create a plot 
-     */
-    constructor(){
+	/** 
+  * Create a plot 
+  */
+	function Plot() {
+		_classCallCheck(this, Plot);
 
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "height", "__height", 100);
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "width", "__width", 100);
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "container", "__container");
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "margin", "__margin",
-		    {
-			"top":4,
-			"left":4,
-			"right":9,
-			"bottom":0
-		    });
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "safeArea", "__safe_area", this.margin());
+		(0, _accessor.addAccessor)(this, "height", "__height", 100);
+		(0, _accessor.addAccessor)(this, "width", "__width", 100);
+		(0, _accessor.addAccessor)(this, "container", "__container");
+		(0, _accessor.addAccessor)(this, "margin", "__margin", {
+			"top": 4,
+			"left": 4,
+			"right": 9,
+			"bottom": 0
+		});
+		(0, _accessor.addAccessor)(this, "safeArea", "__safe_area", this.margin());
 
-	// set up some defaults for a scatter plot of values from 1 to 100
-	this.xScale = d3__WEBPACK_IMPORTED_MODULE_0__["scaleLinear"]().range(this.width());
-	this.yScale = d3__WEBPACK_IMPORTED_MODULE_0__["scaleLinear"]().range(this.height());
-    	this.xDomain = d3__WEBPACK_IMPORTED_MODULE_0__["range"](1,100); 
-    	this.yDomain = (new Array(100)).map(() => d3__WEBPACK_IMPORTED_MODULE_0__["randomUniform"](1, 100));
-    }
+		// set up some defaults for a scatter plot of values from 1 to 100
+		this.xScale = d3.scaleLinear().range(this.width());
+		this.yScale = d3.scaleLinear().range(this.height());
+		this.xDomain = d3.range(1, 100);
+		this.yDomain = new Array(100).map(function () {
+			return d3.randomUniform(1, 100);
+		});
+	}
 
-    draw(){
+	_createClass(Plot, [{
+		key: "draw",
+		value: function draw() {
 
-	this.svg = this.svg || this.container().append("svg");
-	this.svg.attr("height",this.height())
-	this.svg.attr("width", this.width())
+			this.svg = this.svg || this.container().append("svg");
+			this.svg.attr("height", this.height());
+			this.svg.attr("width", this.width());
 
-	this.safeArea(Object.assign({}, this.margin()));	
-	return this;
-    }
+			this.safeArea(Object.assign({}, this.margin()));
+			return this;
+		}
+	}, {
+		key: "redraw",
+		value: function redraw() {
+			this.svg = undefined;
+			this.draw();
+		}
+	}]);
 
-    redraw(){
-	this.svg = undefined;
-	this.draw();
-    }
+	return Plot;
+}();
 
-}
-
-
-
+exports.Plot = Plot;
 
 /***/ }),
 
@@ -39899,172 +40401,141 @@ class Plot{
 /*!***********************!*\
   !*** ./src/smbars.js ***!
   \***********************/
-/*! no exports provided */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony import */ var d3__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
-/* harmony import */ var numeraljs__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! numeraljs */ "./node_modules/numeraljs/numeral.js");
-/* harmony import */ var numeraljs__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(numeraljs__WEBPACK_IMPORTED_MODULE_1__);
-/* harmony import */ var _barchart_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./barchart.js */ "./src/barchart.js");
-/* harmony import */ var _xyplot_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./xyplot.js */ "./src/xyplot.js");
+
+
+var _d = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
+
+var d3 = _interopRequireWildcard(_d);
+
+var _numeraljs = __webpack_require__(/*! numeraljs */ "./node_modules/numeraljs/numeral.js");
+
+var numeral = _interopRequireWildcard(_numeraljs);
+
+var _barchart = __webpack_require__(/*! ./barchart.js */ "./src/barchart.js");
+
+var _xyplot = __webpack_require__(/*! ./xyplot.js */ "./src/xyplot.js");
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) newObj[key] = obj[key]; } } newObj.default = obj; return newObj; } }
+
 // Small timeline
 
-
-
-
-
-
 var colors = {
-    "Injection drug use":d3__WEBPACK_IMPORTED_MODULE_0__["interpolateBuPu"](0.25),
-    "Heterosexual contact":d3__WEBPACK_IMPORTED_MODULE_0__["interpolateBuPu"](0.5),    
-    "Male-to-male sexual contact":d3__WEBPACK_IMPORTED_MODULE_0__["interpolateBuPu"](1),
+			"Injection drug use": d3.interpolateBuPu(0.25),
+			"Heterosexual contact": d3.interpolateBuPu(0.5),
+			"Male-to-male sexual contact": d3.interpolateBuPu(1)
+};
+
+function drawChart(data, container) {
+
+			var plot = new _xyplot.XYPlot().container(d3.select(container)).width(85).height(85);
+
+			var data = data.map(function (d) {
+						return {
+									"label": d["transmission-overall"],
+									"value": Number(d["2016"])
+						};
+			}).filter(function (d) {
+						console.log("filter", d);
+						return d["label"] in colors;
+			});
+
+			var chart = new _barchart.BarChart(plot).data(data);
+
+			plot.yAxisGenerator = function (scale) {
+						return d3.axisLeft(scale).tickValues(d3.extent(scale.domain())).tickFormat(function (d, i) {
+
+									return numeral(d).format("0a").toUpperCase();
+									// d3.format(".1s"));
+						});
+						// .tickValues([0, ylim/2, ylim]);
+			};
+
+			plot.xAxisGenerator = function (scale) {
+						return d3.axisBottom(scale).tickValues([]);
+			};
+
+			chart.draw();
+
+			chart.plotArea.selectAll("rect").style("fill", function (d, i) {
+						var label = data[i]["label"];
+
+						console.log("chart.bars.style", label, i);
+
+						return colors[label];
+			});
+
+			// data.forEach(function(line){
+			// 	var d = lineData(line);
+			// 	console.log("Drawing line with data", d);
+
+
+			// 	// chart.linePath
+			// 	//     .classed("plot", true)
+			// 	//     .attr("stroke", colors[line["race"]])
+			// 	//     .attr("data-race", line["race"])
+
+			// })
+}
+function drawWithData(data) {
+
+			console.log("drawing with data", data);
+
+			var container = d3.select("#container").append("div").classed("center-graphic", true);
+
+			var title = container.append("h7").text("Most diagnoses come from from male-to-male sexual contact");
+
+			var explainer = container.append("p").classed("small-text", true).text("Male-to-male sexual contact accounted for the largest portion " + " of diagnoses, compared with other manners of transmission. ");
+
+			var smContainer = container.append("div").classed("small-multiple-container", true);;
+
+			var sourceline = container.append("div").classed("sourceline", true).text("SOURCE: Centers for Disease Control");
+
+			var stateData = {};
+
+			data.forEach(function (d) {
+						if (!(d.Geography in stateData)) {
+									stateData[d.Geography] = [];
+						}
+
+						stateData[d.Geography].push(d);
+			});
+
+			console.log(stateData);
+
+			var boxes = smContainer.selectAll(".small-chart").data(Object.keys(stateData)).enter().append("div").classed("small-chart", true).classed("line-chart", true).attr("data-geography", function (d) {
+						return d;
+			});
+
+			var legend_container = smContainer.append("div").classed("small-chart", true).classed("legend-container", true);
+			var legend_items = legend_container.selectAll(".legend-item").data(Object.keys(colors)).enter().append("div").classed("legend-item", true);
+
+			var legend_boxes = legend_items.append("div").classed("legend-box", true).style("background-color", function (d) {
+						return colors[d];
+			});
+
+			var legen_labels = legend_items.append("div").classed("legend-label", true).text(function (d) {
+						return d;
+			});
+
+			var titles = boxes.append("div").classed("title", true).text(function (d) {
+						return d;
+			});
+
+			var plots = boxes.append("div");
+
+			plots.each(function (d) {
+						console.log("plots.each", d);
+						drawChart(stateData[d], this);
+			});
 }
 
-function drawChart(data, container){
-
-    var plot = new _xyplot_js__WEBPACK_IMPORTED_MODULE_3__["XYPlot"]()
-	.container(d3__WEBPACK_IMPORTED_MODULE_0__["select"](container))
-	.width(85)
-	.height(85);
-
-    var data = data
-	.map(function(d){
-	    return {
-		"label":d["transmission-overall"],
-		"value":Number(d["2016"])
-	    }
-	})
-	.filter(function(d){
-	    console.log("filter", d);
-	    return d["label"] in colors;
-	});
-
-    var chart = new _barchart_js__WEBPACK_IMPORTED_MODULE_2__["BarChart"](plot)
-	.data(data);
-
-    plot.yAxisGenerator = function(scale){
-	return d3__WEBPACK_IMPORTED_MODULE_0__["axisLeft"](scale)
-	    .tickValues(d3__WEBPACK_IMPORTED_MODULE_0__["extent"](scale.domain()))
-	    .tickFormat(function(d, i){
-
-		return numeraljs__WEBPACK_IMPORTED_MODULE_1__(d).format("0a").toUpperCase();
-		// d3.format(".1s"));
-	    });
-	// .tickValues([0, ylim/2, ylim]);
-    }
-
-    plot.xAxisGenerator = function(scale){
-	return d3__WEBPACK_IMPORTED_MODULE_0__["axisBottom"](scale)
-	    .tickValues([]);
-    }
-    
-    chart.draw();
-
-    chart.plotArea.selectAll("rect")
-	.style("fill", function(d, i){
-	    var label = data[i]["label"];
-	
-	    console.log("chart.bars.style", label, i);
-	
-	    return colors[label];
-    });
-
-
-    // data.forEach(function(line){
-    // 	var d = lineData(line);
-    // 	console.log("Drawing line with data", d);
-
-
-    // 	// chart.linePath
-    // 	//     .classed("plot", true)
-    // 	//     .attr("stroke", colors[line["race"]])
-    // 	//     .attr("data-race", line["race"])
-	
-    // })
-
-}
-function drawWithData(data){
-
-    console.log("drawing with data", data);
-
-    var container = d3__WEBPACK_IMPORTED_MODULE_0__["select"]("#container")
-	.append("div")
-	.classed("center-graphic", true);
-
-    var title = container.append("h7")
-	.text("Most diagnoses come from from male-to-male sexual contact")
-
-    var explainer = container.append("p")
-	.classed("small-text", true)
-	.text("Male-to-male sexual contact accounted for the largest portion "
-	      + " of diagnoses, compared with other manners of transmission. ")
-
-    var smContainer = container.append("div")
-	.classed("small-multiple-container", true);;
-
-    var sourceline = container.append("div")
-	.classed("sourceline", true)
-	.text("SOURCE: Centers for Disease Control");
-
-    var stateData = {};
-
-    data.forEach(function(d){
-	if (! (d.Geography in stateData)) {
-	    stateData[d.Geography] = [];
-	}
-
-	stateData[d.Geography].push(d);
-    });
-
-    console.log(stateData);
-
-    var boxes = smContainer.selectAll(".small-chart")
-	.data(Object.keys(stateData))
-	.enter()
-	.append("div")
-	.classed("small-chart", true)
-	.classed("line-chart", true)
-	.attr("data-geography", d => d)
-
-    var legend_container = smContainer.append("div")
-	.classed("small-chart", true)
-	.classed("legend-container", true)
-    var legend_items = legend_container.selectAll(".legend-item")
-	.data(Object.keys(colors))
-	.enter()
-	.append("div")
-	.classed("legend-item", true)
-
-    var legend_boxes = legend_items.append("div")
-	.classed("legend-box", true)
-	.style("background-color", function(d){
-	    return colors[d];
-	})
-
-    var legen_labels = legend_items.append("div")
-	.classed("legend-label", true)
-	.text(d => d);
-
-    var titles = boxes.append("div")
-	.classed("title", true)
-	.text(d => d)
-
-    var plots = boxes.append("div")
-
-    plots.each(function(d){
-	console.log("plots.each", d);
-	drawChart(stateData[d], this);
-    });
-}
-
-d3__WEBPACK_IMPORTED_MODULE_0__["csv"]("data/transmission-2016.csv")
-    .then(function(data){
-	drawWithData(data);
-    });
-
-
+d3.csv("data/transmission-2016.csv").then(function (data) {
+			drawWithData(data);
+});
 
 /***/ }),
 
@@ -40072,140 +40543,162 @@ d3__WEBPACK_IMPORTED_MODULE_0__["csv"]("data/transmission-2016.csv")
 /*!***********************!*\
   !*** ./src/xyplot.js ***!
   \***********************/
-/*! exports provided: XYPlot */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "XYPlot", function() { return XYPlot; });
-/* harmony import */ var d3__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
-/* harmony import */ var _plot_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./plot.js */ "./src/plot.js");
 
 
+Object.defineProperty(exports, "__esModule", {
+			value: true
+});
+exports.XYPlot = undefined;
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+var _get = function get(object, property, receiver) { if (object === null) object = Function.prototype; var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
+
+var _d = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
+
+var d3 = _interopRequireWildcard(_d);
+
+var _plot = __webpack_require__(/*! ./plot.js */ "./src/plot.js");
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) newObj[key] = obj[key]; } } newObj.default = obj; return newObj; } }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
 
 /** Class representing a plot with a left/bottom x and y axis */
-class XYPlot extends _plot_js__WEBPACK_IMPORTED_MODULE_1__["Plot"] {
+var XYPlot = function (_Plot) {
+			_inherits(XYPlot, _Plot);
 
-    constructor(...args){
-	
-	super(...args);
+			function XYPlot() {
+						var _ref;
 
-    }
+						_classCallCheck(this, XYPlot);
 
-    draw() {
+						for (var _len = arguments.length, args = Array(_len), _key = 0; _key < _len; _key++) {
+									args[_key] = arguments[_key];
+						}
 
-	// plot adds svg
-	super.draw();
+						return _possibleConstructorReturn(this, (_ref = XYPlot.__proto__ || Object.getPrototypeOf(XYPlot)).call.apply(_ref, [this].concat(args)));
+			}
 
-	this.drawAxes();
+			_createClass(XYPlot, [{
+						key: "draw",
+						value: function draw() {
 
-	// update the safe area so drawing is within axis
-	var safeArea = this.safeArea();
+									// plot adds svg
+									_get(XYPlot.prototype.__proto__ || Object.getPrototypeOf(XYPlot.prototype), "draw", this).call(this);
 
-	safeArea.left += this.yAxisEl.node().getBBox().width;
-	safeArea.bottom += this.xAxisEl.node().getBBox().height;
-	
-	this.safeArea(safeArea);
-	    
-	return this;
-    }
+									this.drawAxes();
 
-    createAxisElements() {
-	this.xAxisEl = this.xAxisEl || this.svg.append("g")
-	    .classed("xaxis", true);
-	
-	this.yAxisEl = this.yAxisEl || this.svg.append("g")
-	    .classed("yaxis", true);
-    }
+									// update the safe area so drawing is within axis
+									var safeArea = this.safeArea();
 
-    xAxisGenerator(xscale){
-	return d3__WEBPACK_IMPORTED_MODULE_0__["axisBottom"](xscale);	
-    }
+									safeArea.left += this.yAxisEl.node().getBBox().width;
+									safeArea.bottom += this.xAxisEl.node().getBBox().height;
 
-    yAxisGenerator(yscale){
-	return d3__WEBPACK_IMPORTED_MODULE_0__["axisLeft"](yscale);
-    }
-    
-    renderAxisElements() {
+									this.safeArea(safeArea);
 
-	// var xscale = this.xScale.domain(this.xDomain);
-	// var yscale = this.yScale.domain(this.yDomain);
-	var xscale = this.xScale;
-	var yscale = this.yScale;
-	
-	var xaxis = this.xAxisGenerator(xscale);
-	var yaxis = this.yAxisGenerator(yscale);
+									return this;
+						}
+			}, {
+						key: "createAxisElements",
+						value: function createAxisElements() {
+									this.xAxisEl = this.xAxisEl || this.svg.append("g").classed("xaxis", true);
 
-	// add the elements so we can get important size information
-	this.xAxisEl.call(xaxis);
-	this.yAxisEl.call(yaxis);
+									this.yAxisEl = this.yAxisEl || this.svg.append("g").classed("yaxis", true);
+						}
+			}, {
+						key: "xAxisGenerator",
+						value: function xAxisGenerator(xscale) {
+									return d3.axisBottom(xscale);
+						}
+			}, {
+						key: "yAxisGenerator",
+						value: function yAxisGenerator(yscale) {
+									return d3.axisLeft(yscale);
+						}
+			}, {
+						key: "renderAxisElements",
+						value: function renderAxisElements() {
 
-	yscale.range([this.height()
-		      - this.margin().bottom
-		      - this.xAxisEl.node().getBBox().height,
-		      this.margin().top]);
-	
-	xscale.range([
-	    this.margin().left
-	    	+ this.yAxisEl.node().getBBox().width,
-	    this.width()
-	    	- this.margin().right]);
+									// var xscale = this.xScale.domain(this.xDomain);
+									// var yscale = this.yScale.domain(this.yDomain);
+									var xscale = this.xScale;
+									var yscale = this.yScale;
 
-	// update the scales
-	// this.xScale = xscale;
-	// this.yScale = yscale;
+									var xaxis = this.xAxisGenerator(xscale);
+									var yaxis = this.yAxisGenerator(yscale);
 
-	this.xAxisEl.call(xaxis);
-	this.yAxisEl.call(yaxis);
+									// add the elements so we can get important size information
+									this.xAxisEl.call(xaxis);
+									this.yAxisEl.call(yaxis);
 
-	// calculate the transforms
-	const xAxisYOffset = this.height()
-	      - this.xAxisEl.node().getBBox().height
-	      - this.margin().bottom;
+									yscale.range([this.height() - this.margin().bottom - this.xAxisEl.node().getBBox().height, this.margin().top]);
 
-	const yAxisXOffset = this.margin().left 
-	      + this.yAxisEl.node().getBBox().width
-	      // + this.margin().left;
+									xscale.range([this.margin().left + this.yAxisEl.node().getBBox().width, this.width() - this.margin().right]);
 
-	// helper function for writing svg translates
-	const translate = (x, y) => "translate(" + x + ", " + y + ")";
+									// update the scales
+									// this.xScale = xscale;
+									// this.yScale = yscale;
 
-	// console.log("offsets",
-	// 	    xAxisYOffset,
-	// 	    yAxisXOffset);
-		   //  this.yAxisEl.node().getBBox().width,		    
-		   //  this.safeArea(),
-		   //  this.margin(),
-		   //  // this.xAxisEl.node().getBBox().height,
+									this.xAxisEl.call(xaxis);
+									this.yAxisEl.call(yaxis);
 
-		   // );
+									// calculate the transforms
+									var xAxisYOffset = this.height() - this.xAxisEl.node().getBBox().height - this.margin().bottom;
 
-	this.xAxisEl.attr("transform", translate(0, xAxisYOffset));
-	this.yAxisEl.attr("transform", translate(yAxisXOffset, 0));
-	// console.log("OK");
-    }
+									var yAxisXOffset = this.margin().left + this.yAxisEl.node().getBBox().width;
+									// + this.margin().left;
 
-    drawAxes() {
-	this.createAxisElements();
-	this.renderAxisElements();
-    }
-    
-}
+									// helper function for writing svg translates
+									var translate = function translate(x, y) {
+												return "translate(" + x + ", " + y + ")";
+									};
 
+									// console.log("offsets",
+									// 	    xAxisYOffset,
+									// 	    yAxisXOffset);
+									//  this.yAxisEl.node().getBBox().width,		    
+									//  this.safeArea(),
+									//  this.margin(),
+									//  // this.xAxisEl.node().getBBox().height,
 
+									// );
 
+									this.xAxisEl.attr("transform", translate(0, xAxisYOffset));
+									this.yAxisEl.attr("transform", translate(yAxisXOffset, 0));
+									// console.log("OK");
+						}
+			}, {
+						key: "drawAxes",
+						value: function drawAxes() {
+									this.createAxisElements();
+									this.renderAxisElements();
+						}
+			}]);
 
+			return XYPlot;
+}(_plot.Plot);
 
+exports.XYPlot = XYPlot;
 
 /***/ }),
 
 /***/ 4:
-/*!********************************************!*\
-  !*** multi babel-polyfill ./src/smbars.js ***!
-  \********************************************/
+/*!*********************************************************!*\
+  !*** multi whatwg-fetch babel-polyfill ./src/smbars.js ***!
+  \*********************************************************/
 /*! no static exports found */
 /***/ (function(module, exports, __webpack_require__) {
 
+__webpack_require__(/*! whatwg-fetch */"./node_modules/whatwg-fetch/fetch.js");
 __webpack_require__(/*! babel-polyfill */"./node_modules/babel-polyfill/lib/index.js");
 module.exports = __webpack_require__(/*! ./src/smbars.js */"./src/smbars.js");
 

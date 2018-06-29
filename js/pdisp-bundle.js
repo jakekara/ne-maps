@@ -38847,66 +38847,543 @@ module.exports = g;
 
 /***/ }),
 
+/***/ "./node_modules/whatwg-fetch/fetch.js":
+/*!********************************************!*\
+  !*** ./node_modules/whatwg-fetch/fetch.js ***!
+  \********************************************/
+/*! no static exports found */
+/***/ (function(module, exports) {
+
+(function(self) {
+  'use strict';
+
+  if (self.fetch) {
+    return
+  }
+
+  var support = {
+    searchParams: 'URLSearchParams' in self,
+    iterable: 'Symbol' in self && 'iterator' in Symbol,
+    blob: 'FileReader' in self && 'Blob' in self && (function() {
+      try {
+        new Blob()
+        return true
+      } catch(e) {
+        return false
+      }
+    })(),
+    formData: 'FormData' in self,
+    arrayBuffer: 'ArrayBuffer' in self
+  }
+
+  if (support.arrayBuffer) {
+    var viewClasses = [
+      '[object Int8Array]',
+      '[object Uint8Array]',
+      '[object Uint8ClampedArray]',
+      '[object Int16Array]',
+      '[object Uint16Array]',
+      '[object Int32Array]',
+      '[object Uint32Array]',
+      '[object Float32Array]',
+      '[object Float64Array]'
+    ]
+
+    var isDataView = function(obj) {
+      return obj && DataView.prototype.isPrototypeOf(obj)
+    }
+
+    var isArrayBufferView = ArrayBuffer.isView || function(obj) {
+      return obj && viewClasses.indexOf(Object.prototype.toString.call(obj)) > -1
+    }
+  }
+
+  function normalizeName(name) {
+    if (typeof name !== 'string') {
+      name = String(name)
+    }
+    if (/[^a-z0-9\-#$%&'*+.\^_`|~]/i.test(name)) {
+      throw new TypeError('Invalid character in header field name')
+    }
+    return name.toLowerCase()
+  }
+
+  function normalizeValue(value) {
+    if (typeof value !== 'string') {
+      value = String(value)
+    }
+    return value
+  }
+
+  // Build a destructive iterator for the value list
+  function iteratorFor(items) {
+    var iterator = {
+      next: function() {
+        var value = items.shift()
+        return {done: value === undefined, value: value}
+      }
+    }
+
+    if (support.iterable) {
+      iterator[Symbol.iterator] = function() {
+        return iterator
+      }
+    }
+
+    return iterator
+  }
+
+  function Headers(headers) {
+    this.map = {}
+
+    if (headers instanceof Headers) {
+      headers.forEach(function(value, name) {
+        this.append(name, value)
+      }, this)
+    } else if (Array.isArray(headers)) {
+      headers.forEach(function(header) {
+        this.append(header[0], header[1])
+      }, this)
+    } else if (headers) {
+      Object.getOwnPropertyNames(headers).forEach(function(name) {
+        this.append(name, headers[name])
+      }, this)
+    }
+  }
+
+  Headers.prototype.append = function(name, value) {
+    name = normalizeName(name)
+    value = normalizeValue(value)
+    var oldValue = this.map[name]
+    this.map[name] = oldValue ? oldValue+','+value : value
+  }
+
+  Headers.prototype['delete'] = function(name) {
+    delete this.map[normalizeName(name)]
+  }
+
+  Headers.prototype.get = function(name) {
+    name = normalizeName(name)
+    return this.has(name) ? this.map[name] : null
+  }
+
+  Headers.prototype.has = function(name) {
+    return this.map.hasOwnProperty(normalizeName(name))
+  }
+
+  Headers.prototype.set = function(name, value) {
+    this.map[normalizeName(name)] = normalizeValue(value)
+  }
+
+  Headers.prototype.forEach = function(callback, thisArg) {
+    for (var name in this.map) {
+      if (this.map.hasOwnProperty(name)) {
+        callback.call(thisArg, this.map[name], name, this)
+      }
+    }
+  }
+
+  Headers.prototype.keys = function() {
+    var items = []
+    this.forEach(function(value, name) { items.push(name) })
+    return iteratorFor(items)
+  }
+
+  Headers.prototype.values = function() {
+    var items = []
+    this.forEach(function(value) { items.push(value) })
+    return iteratorFor(items)
+  }
+
+  Headers.prototype.entries = function() {
+    var items = []
+    this.forEach(function(value, name) { items.push([name, value]) })
+    return iteratorFor(items)
+  }
+
+  if (support.iterable) {
+    Headers.prototype[Symbol.iterator] = Headers.prototype.entries
+  }
+
+  function consumed(body) {
+    if (body.bodyUsed) {
+      return Promise.reject(new TypeError('Already read'))
+    }
+    body.bodyUsed = true
+  }
+
+  function fileReaderReady(reader) {
+    return new Promise(function(resolve, reject) {
+      reader.onload = function() {
+        resolve(reader.result)
+      }
+      reader.onerror = function() {
+        reject(reader.error)
+      }
+    })
+  }
+
+  function readBlobAsArrayBuffer(blob) {
+    var reader = new FileReader()
+    var promise = fileReaderReady(reader)
+    reader.readAsArrayBuffer(blob)
+    return promise
+  }
+
+  function readBlobAsText(blob) {
+    var reader = new FileReader()
+    var promise = fileReaderReady(reader)
+    reader.readAsText(blob)
+    return promise
+  }
+
+  function readArrayBufferAsText(buf) {
+    var view = new Uint8Array(buf)
+    var chars = new Array(view.length)
+
+    for (var i = 0; i < view.length; i++) {
+      chars[i] = String.fromCharCode(view[i])
+    }
+    return chars.join('')
+  }
+
+  function bufferClone(buf) {
+    if (buf.slice) {
+      return buf.slice(0)
+    } else {
+      var view = new Uint8Array(buf.byteLength)
+      view.set(new Uint8Array(buf))
+      return view.buffer
+    }
+  }
+
+  function Body() {
+    this.bodyUsed = false
+
+    this._initBody = function(body) {
+      this._bodyInit = body
+      if (!body) {
+        this._bodyText = ''
+      } else if (typeof body === 'string') {
+        this._bodyText = body
+      } else if (support.blob && Blob.prototype.isPrototypeOf(body)) {
+        this._bodyBlob = body
+      } else if (support.formData && FormData.prototype.isPrototypeOf(body)) {
+        this._bodyFormData = body
+      } else if (support.searchParams && URLSearchParams.prototype.isPrototypeOf(body)) {
+        this._bodyText = body.toString()
+      } else if (support.arrayBuffer && support.blob && isDataView(body)) {
+        this._bodyArrayBuffer = bufferClone(body.buffer)
+        // IE 10-11 can't handle a DataView body.
+        this._bodyInit = new Blob([this._bodyArrayBuffer])
+      } else if (support.arrayBuffer && (ArrayBuffer.prototype.isPrototypeOf(body) || isArrayBufferView(body))) {
+        this._bodyArrayBuffer = bufferClone(body)
+      } else {
+        throw new Error('unsupported BodyInit type')
+      }
+
+      if (!this.headers.get('content-type')) {
+        if (typeof body === 'string') {
+          this.headers.set('content-type', 'text/plain;charset=UTF-8')
+        } else if (this._bodyBlob && this._bodyBlob.type) {
+          this.headers.set('content-type', this._bodyBlob.type)
+        } else if (support.searchParams && URLSearchParams.prototype.isPrototypeOf(body)) {
+          this.headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8')
+        }
+      }
+    }
+
+    if (support.blob) {
+      this.blob = function() {
+        var rejected = consumed(this)
+        if (rejected) {
+          return rejected
+        }
+
+        if (this._bodyBlob) {
+          return Promise.resolve(this._bodyBlob)
+        } else if (this._bodyArrayBuffer) {
+          return Promise.resolve(new Blob([this._bodyArrayBuffer]))
+        } else if (this._bodyFormData) {
+          throw new Error('could not read FormData body as blob')
+        } else {
+          return Promise.resolve(new Blob([this._bodyText]))
+        }
+      }
+
+      this.arrayBuffer = function() {
+        if (this._bodyArrayBuffer) {
+          return consumed(this) || Promise.resolve(this._bodyArrayBuffer)
+        } else {
+          return this.blob().then(readBlobAsArrayBuffer)
+        }
+      }
+    }
+
+    this.text = function() {
+      var rejected = consumed(this)
+      if (rejected) {
+        return rejected
+      }
+
+      if (this._bodyBlob) {
+        return readBlobAsText(this._bodyBlob)
+      } else if (this._bodyArrayBuffer) {
+        return Promise.resolve(readArrayBufferAsText(this._bodyArrayBuffer))
+      } else if (this._bodyFormData) {
+        throw new Error('could not read FormData body as text')
+      } else {
+        return Promise.resolve(this._bodyText)
+      }
+    }
+
+    if (support.formData) {
+      this.formData = function() {
+        return this.text().then(decode)
+      }
+    }
+
+    this.json = function() {
+      return this.text().then(JSON.parse)
+    }
+
+    return this
+  }
+
+  // HTTP methods whose capitalization should be normalized
+  var methods = ['DELETE', 'GET', 'HEAD', 'OPTIONS', 'POST', 'PUT']
+
+  function normalizeMethod(method) {
+    var upcased = method.toUpperCase()
+    return (methods.indexOf(upcased) > -1) ? upcased : method
+  }
+
+  function Request(input, options) {
+    options = options || {}
+    var body = options.body
+
+    if (input instanceof Request) {
+      if (input.bodyUsed) {
+        throw new TypeError('Already read')
+      }
+      this.url = input.url
+      this.credentials = input.credentials
+      if (!options.headers) {
+        this.headers = new Headers(input.headers)
+      }
+      this.method = input.method
+      this.mode = input.mode
+      if (!body && input._bodyInit != null) {
+        body = input._bodyInit
+        input.bodyUsed = true
+      }
+    } else {
+      this.url = String(input)
+    }
+
+    this.credentials = options.credentials || this.credentials || 'omit'
+    if (options.headers || !this.headers) {
+      this.headers = new Headers(options.headers)
+    }
+    this.method = normalizeMethod(options.method || this.method || 'GET')
+    this.mode = options.mode || this.mode || null
+    this.referrer = null
+
+    if ((this.method === 'GET' || this.method === 'HEAD') && body) {
+      throw new TypeError('Body not allowed for GET or HEAD requests')
+    }
+    this._initBody(body)
+  }
+
+  Request.prototype.clone = function() {
+    return new Request(this, { body: this._bodyInit })
+  }
+
+  function decode(body) {
+    var form = new FormData()
+    body.trim().split('&').forEach(function(bytes) {
+      if (bytes) {
+        var split = bytes.split('=')
+        var name = split.shift().replace(/\+/g, ' ')
+        var value = split.join('=').replace(/\+/g, ' ')
+        form.append(decodeURIComponent(name), decodeURIComponent(value))
+      }
+    })
+    return form
+  }
+
+  function parseHeaders(rawHeaders) {
+    var headers = new Headers()
+    // Replace instances of \r\n and \n followed by at least one space or horizontal tab with a space
+    // https://tools.ietf.org/html/rfc7230#section-3.2
+    var preProcessedHeaders = rawHeaders.replace(/\r?\n[\t ]+/g, ' ')
+    preProcessedHeaders.split(/\r?\n/).forEach(function(line) {
+      var parts = line.split(':')
+      var key = parts.shift().trim()
+      if (key) {
+        var value = parts.join(':').trim()
+        headers.append(key, value)
+      }
+    })
+    return headers
+  }
+
+  Body.call(Request.prototype)
+
+  function Response(bodyInit, options) {
+    if (!options) {
+      options = {}
+    }
+
+    this.type = 'default'
+    this.status = options.status === undefined ? 200 : options.status
+    this.ok = this.status >= 200 && this.status < 300
+    this.statusText = 'statusText' in options ? options.statusText : 'OK'
+    this.headers = new Headers(options.headers)
+    this.url = options.url || ''
+    this._initBody(bodyInit)
+  }
+
+  Body.call(Response.prototype)
+
+  Response.prototype.clone = function() {
+    return new Response(this._bodyInit, {
+      status: this.status,
+      statusText: this.statusText,
+      headers: new Headers(this.headers),
+      url: this.url
+    })
+  }
+
+  Response.error = function() {
+    var response = new Response(null, {status: 0, statusText: ''})
+    response.type = 'error'
+    return response
+  }
+
+  var redirectStatuses = [301, 302, 303, 307, 308]
+
+  Response.redirect = function(url, status) {
+    if (redirectStatuses.indexOf(status) === -1) {
+      throw new RangeError('Invalid status code')
+    }
+
+    return new Response(null, {status: status, headers: {location: url}})
+  }
+
+  self.Headers = Headers
+  self.Request = Request
+  self.Response = Response
+
+  self.fetch = function(input, init) {
+    return new Promise(function(resolve, reject) {
+      var request = new Request(input, init)
+      var xhr = new XMLHttpRequest()
+
+      xhr.onload = function() {
+        var options = {
+          status: xhr.status,
+          statusText: xhr.statusText,
+          headers: parseHeaders(xhr.getAllResponseHeaders() || '')
+        }
+        options.url = 'responseURL' in xhr ? xhr.responseURL : options.headers.get('X-Request-URL')
+        var body = 'response' in xhr ? xhr.response : xhr.responseText
+        resolve(new Response(body, options))
+      }
+
+      xhr.onerror = function() {
+        reject(new TypeError('Network request failed'))
+      }
+
+      xhr.ontimeout = function() {
+        reject(new TypeError('Network request failed'))
+      }
+
+      xhr.open(request.method, request.url, true)
+
+      if (request.credentials === 'include') {
+        xhr.withCredentials = true
+      } else if (request.credentials === 'omit') {
+        xhr.withCredentials = false
+      }
+
+      if ('responseType' in xhr && support.blob) {
+        xhr.responseType = 'blob'
+      }
+
+      request.headers.forEach(function(value, name) {
+        xhr.setRequestHeader(name, value)
+      })
+
+      xhr.send(typeof request._bodyInit === 'undefined' ? null : request._bodyInit)
+    })
+  }
+  self.fetch.polyfill = true
+})(typeof self !== 'undefined' ? self : this);
+
+
+/***/ }),
+
 /***/ "./src/accessor.js":
 /*!*************************!*\
   !*** ./src/accessor.js ***!
   \*************************/
-/*! exports provided: addAccessor, addAccessors, addDescribedAccessor, accessor */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "addAccessor", function() { return addAccessor; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "addAccessors", function() { return addAccessors; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "addDescribedAccessor", function() { return addDescribedAccessor; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "accessor", function() { return accessor; });
-const accessor = function(symb, v){
 
-    if (typeof(symb) !== "undefined") {
-	this[symb] = v;
+
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+var accessor = function accessor(symb, v) {
+
+    if (typeof symb !== "undefined") {
+        this[symb] = v;
     }
 
-    return function(v){
-	if (typeof(v) === "undefined") {
-	    return this[symb];
-	}
-	this[symb] = v;
-	return this;
-    }
-}
+    return function (v) {
+        if (typeof v === "undefined") {
+            return this[symb];
+        }
+        this[symb] = v;
+        return this;
+    };
+};
 
-const addAccessor = function(context, name, symbol, v){
+var addAccessor = function addAccessor(context, name, symbol, v) {
 
     context[name] = accessor.call(context, symbol, v);
-}
+};
 
-const addDescribedAccessor = function(context, description){
+var addDescribedAccessor = function addDescribedAccessor(context, description) {
 
     // context is required
-    
+
     // required
-    const name = description.name;
+    var name = description.name;
 
     // default symbol name
-    const symbol = description.symbol || "__" + name;
+    var symbol = description.symbol || "__" + name;
 
     // undefined is OK
-    const v = description.def;
+    var v = description.def;
 
     addAccessor(context, name, symbol, v);
-    
-}
+};
 
-const addAccessors = function(context, descriptions){
+var addAccessors = function addAccessors(context, descriptions) {
 
-    descriptions.forEach(desc => {
-	addDescribedAccessor(context, desc);
+    descriptions.forEach(function (desc) {
+        addDescribedAccessor(context, desc);
     });
-    
-}
+};
 
- 
-
+exports.addAccessor = addAccessor;
+exports.addAccessors = addAccessors;
+exports.addDescribedAccessor = addDescribedAccessor;
+exports.accessor = accessor;
 
 /***/ }),
 
@@ -38914,213 +39391,200 @@ const addAccessors = function(context, descriptions){
 /*!*************************!*\
   !*** ./src/dumbbell.js ***!
   \*************************/
-/*! exports provided: DumbbellPlot, Bell */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "DumbbellPlot", function() { return DumbbellPlot; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Bell", function() { return Bell; });
-/* harmony import */ var d3__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
-/* harmony import */ var _accessor_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./accessor.js */ "./src/accessor.js");
-// dumbbell plots - horizontal lines with a label at each end, a
+
+
+Object.defineProperty(exports, "__esModule", {
+			value: true
+});
+exports.Bell = exports.DumbbellPlot = undefined;
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }(); // dumbbell plots - horizontal lines with a label at each end, a
 // throughline, and circles to represent values
 
+var _d = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
+
+var d3 = _interopRequireWildcard(_d);
+
+var _accessor = __webpack_require__(/*! ./accessor.js */ "./src/accessor.js");
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) newObj[key] = obj[key]; } } newObj.default = obj; return newObj; } }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+var Bell = function () {
+			function Bell() {
+						_classCallCheck(this, Bell);
+
+						(0, _accessor.addAccessor)(this, "container", "__container");
+						(0, _accessor.addAccessor)(this, "leftLabel", "__left_label", "");
+						(0, _accessor.addAccessor)(this, "rightLabel", "__right_label", "");
+						(0, _accessor.addAccessor)(this, "values", "__values", []);
+						(0, _accessor.addAccessor)(this, "colors", "__colors", function (_) {
+									return "#999";
+						});
+						(0, _accessor.addAccessor)(this, "scale", "__scale");
+						(0, _accessor.addAccessor)(this, "height", "__height");
+						(0, _accessor.addAccessor)(this, "radius", "__radius", 5);
+						(0, _accessor.addAccessor)(this, "hoverCallback", "__hover_callback", function (_) {
+									return null;
+						});
+						(0, _accessor.addAccessor)(this, "hoverEndCallback", "__hover_end_callback", function (_) {
+									return null;
+						});
+			}
+
+			// height(){
+			// 	return this.container().node().getBoundingClientRect().height;
+			// }
+
+			_createClass(Bell, [{
+						key: "width",
+						value: function width() {
+									return this.container().node().getBoundingClientRect().width;
+						}
+			}, {
+						key: "draw",
+						value: function draw() {
+									// Add throughline
+									console.log("Drawing", this.leftLabel(), " plot ", this.container());
+
+									this.svg = this.container().append("svg").attr("height", this.height() + "px").attr("width", this.width() + "px");
+
+									this.throughLine = this.svg.append("line").classed("throughline", true).attr("x1", this.scale()(0)).attr("y1", this.height() / 2).attr("x2", this.scale()(this.scale().domain()[1])).attr("y2", this.height() / 2);
+
+									var scale = this.scale();
+									var colors = this.colors();
+									console.log("height", this.height());
+
+									// console.log("Found values", this.values())
+									// Add circles
+									this.circles = this.svg.append("g").classed("circle-group", true).selectAll("circle").data(this.values()).enter().append("circle").attr("cy", this.height() / 2)
+									// .attr("cx", this.width() / 2) // temporary
+									.attr("cx", function (d) {
+												return scale(d.value);
+									}).attr("r", Math.min(this.height() / 2, this.radius())).attr("fill", function (d) {
+												return colors(d);
+									});
+
+									this.circles.on("mouseover", this.hoverCallback());
+									this.circles.on("mouseout", this.hoverEndCallback());
+
+									console.log("scale", this.scale());
+						}
+			}]);
+
+			return Bell;
+}();
+
+var DumbbellPlot = function () {
+			function DumbbellPlot() {
+						_classCallCheck(this, DumbbellPlot);
+
+						// addAccessor(this, "height", "__height", 100);
+						(0, _accessor.addAccessor)(this, "width", "__width", 100);
+						(0, _accessor.addAccessor)(this, "container", "__container");
+						(0, _accessor.addAccessor)(this, "scale", "__scale");
+						(0, _accessor.addAccessor)(this, "bells", "__bells");
+			}
+
+			_createClass(DumbbellPlot, [{
+						key: "drawAxis",
+						value: function drawAxis() {}
+			}, {
+						key: "drawBells",
+						value: function drawBells() {}
+			}, {
+						key: "draw",
+						value: function draw() {
+
+									// Add an svg
+									// this.svg = this.container().append("svg")
+									//     .attr("width", this.width());
 
 
+									// Create a table with a row and three cells for each bell
+									this.table = this.container().append("table").classed("dumbbell-plot", true);
+									this.rows = this.table.selectAll("tr").data(this.bells()).enter().append("tr");
 
-class Bell {
+									this.leftLabels = this.rows.append("td").classed("label", true).classed("left", true).text(function (d) {
+												return d.leftLabel();
+									});
 
-    constructor(){
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "container", "__container");
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "leftLabel", "__left_label", "");
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "rightLabel", "__right_label", "");
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "values", "__values", []);
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "colors", "__colors", _ => "#999");
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "scale", "__scale");
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "height", "__height");
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "radius", "__radius", 5);
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "hoverCallback", "__hover_callback", _ => null);
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "hoverEndCallback", "__hover_end_callback", _ => null);	
-    }
+									this.plots = this.rows.append("td").classed("plot", true);
 
-    // height(){
-    // 	return this.container().node().getBoundingClientRect().height;
-    // }
+									this.rightLabels = this.rows.append("td").classed("label", true).classed("right", true).text(function (d) {
+												return d.rightLabel();
+									});
 
-    width(){
-	return this.container().node().getBoundingClientRect().width;
-    }
-    
-    draw(){
-	// Add throughline
-	console.log("Drawing", this.leftLabel(), " plot ", this.container());
+									var scale = this.scale();
 
-	this.svg = this.container()
-	    .append("svg")
-	    .attr("height", this.height() + "px")
-	    .attr("width", this.width() + "px");
+									var height = 0;
 
-	this.throughLine = this.svg
-	    .append("line")
-	    .classed("throughline", true)
-	    .attr("x1", this.scale()(0))
-	    .attr("y1", this.height() / 2)
-	    .attr("x2", this.scale()(this.scale().domain()[1]))
-	    .attr("y2", this.height() / 2)
+									var that = this;
+									var hoverCallback = function hoverCallback(d, i) {
 
-	var scale = this.scale();
-	var colors = this.colors();
-	console.log("height", this.height());
-	
-	// console.log("Found values", this.values())
-	// Add circles
-	this.circles = this.svg.append("g")
-	    .classed("circle-group", true)
-	    .selectAll("circle")
-	    .data(this.values())
-	    .enter()
-	    .append("circle")
-	    .attr("cy", this.height() / 2)
-	// .attr("cx", this.width() / 2) // temporary
-	    .attr("cx", d => scale(d.value))
-	    .attr("r", Math.min(this.height() / 2,
-			      this.radius()))
-	    .attr("fill", d => colors(d))
+												var cssSel = ".right.label:nth-child(" + (i + 1) + ")";
 
-	this.circles.on("mouseover", this.hoverCallback());
-	this.circles.on("mouseout", this.hoverEndCallback());
+												console.log("hover", i, i + 1, cssSel, d);
 
-	console.log("scale", this.scale())	
-    }
-}
+												var el = d3.select(cssSel);
+												console.log("el", el);
 
-class DumbbellPlot {
+												el.text(Math.round(d.value));
+									};
 
-    constructor(){
-
-	// addAccessor(this, "height", "__height", 100);
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "width", "__width", 100);
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "container", "__container");
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "scale", "__scale");
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "bells", "__bells");
-	
-    }
-    
-    drawAxis(){
-    }
-
-    drawBells(){
-    }
-
-    draw(){
-
-	// Add an svg
-	// this.svg = this.container().append("svg")
-	//     .attr("width", this.width());
+									var hoverEndCallback = function hoverEndCallback(d, i) {}
+									// that.rightLabels.select("td:nth-child(" + (i + 1) + ")")
+									// 	.text("");
 
 
-	// Create a table with a row and three cells for each bell
-	this.table = this.container().append("table").classed("dumbbell-plot", true);
-	this.rows = this.table.selectAll("tr")
-	    .data(this.bells())
-	    .enter()
-	    .append("tr")
+									// Draw each plot
+									;this.plots.attr("width", this.width()).each(function (d, i) {
+												height = this.getBoundingClientRect().height;
+												d.container.call(d, d3.select(this));
+												d.scale.call(d, scale);
+												d.height.call(d, height);
+												// d.hoverCallback(a => hoverCallback( a, i));
+												// d.hoverEndCallback(a => hoverEndCallback(a, i));			
+												d.draw.call(d);
+									});
 
-	this.leftLabels = this.rows.append("td")
-	    .classed("label", true)
-	    .classed("left", true)
-	    .text(function(d){ return d.leftLabel(); })
+									// Add axis
+									this.axisRow = this.table.append("tr");
+									this.axisRow.append("td");
+									this.scaleCell = this.axisRow.append("td");
+									this.axisRow.append("td");
 
-	this.plots = this.rows.append("td")
-	    .classed("plot", true)
+									this.scaleSvg = this.scaleCell.append("svg").attr("height", 20);
 
-	this.rightLabels = this.rows.append("td")
-	    .classed("label", true)
-	    .classed("right", true)
-	    .text(d => d.rightLabel());
+									var axis = d3.axisBottom().scale(scale).tickValues([0, 800, 1600]);
 
-	var scale = this.scale()
+									this.scaleSvg.call(axis);
 
-	var height = 0;
+									// Add a legend
+									this.legendCell = this.table.append("tr").append("td").attr("colspan", 3);
 
+									this.legendItems = this.legendCell.selectAll(".legend-item").data(this.bells()[0].values()).enter().append("div").classed("legend-item", true);
 
-	var that = this;
-	var hoverCallback = function(d, i){
+									this.legendBoxes = this.legendItems.append("div").classed("legend-box", true).style("background-color", function (d) {
+												return d.color;
+									});
 
+									this.legendLabels = this.legendItems.append("div").classed("legend-label", true).text(function (d) {
+												return d.label;
+									});
+						}
+			}]);
 
-	    var cssSel = ".right.label:nth-child(" + (i + 1) + ")";
+			return DumbbellPlot;
+}();
 
-	    console.log("hover", i, i+1, cssSel, d);	    
-
-	    var el = d3__WEBPACK_IMPORTED_MODULE_0__["select"](cssSel)
-	    console.log("el", el)
-
-	    el.text(Math.round(d.value));
-	}
-
-	var hoverEndCallback = function(d, i){
-	    // that.rightLabels.select("td:nth-child(" + (i + 1) + ")")
-	    // 	.text("");
-	}
-	
-	// Draw each plot
-	this.plots
-	    .attr("width", this.width())
-	    .each(function(d, i){
-		height = this.getBoundingClientRect().height;
-		d.container.call(d, d3__WEBPACK_IMPORTED_MODULE_0__["select"](this));
-		d.scale.call(d, scale);
-		d.height.call(d, height);
-		// d.hoverCallback(a => hoverCallback( a, i));
-		// d.hoverEndCallback(a => hoverEndCallback(a, i));			
-		d.draw.call(d);
-
-	    });
-
-	// Add axis
-	this.axisRow = this.table.append("tr")
-	this.axisRow.append("td")
-	this.scaleCell = this.axisRow.append("td")
-	this.axisRow.append("td")
-
-	this.scaleSvg = this.scaleCell.append("svg")
-	    .attr("height", 20);
-	
-	var axis = d3__WEBPACK_IMPORTED_MODULE_0__["axisBottom"]()
-	    .scale(scale)
-	    .tickValues([0, 800, 1600])
-	
-	this.scaleSvg.call(axis);
-
-	// Add a legend
-	this.legendCell = this.table.append("tr")
-	    .append("td")
-	    .attr("colspan",3);
-
-	this.legendItems = this.legendCell.selectAll(".legend-item")
-	    .data(this.bells()[0].values())
-	    .enter()
-	    .append("div")
-	    .classed("legend-item", true)
-
-	this.legendBoxes = this.legendItems.append("div")
-	    .classed("legend-box", true)
-	    .style("background-color", function(d){
-		return d.color;
-	    });
-
-	this.legendLabels = this.legendItems.append("div")
-	    .classed("legend-label", true)
-	    .text(d => d.label);
-	    
-    }
-    
-}
-
-
-
-
+exports.DumbbellPlot = DumbbellPlot;
+exports.Bell = Bell;
 
 /***/ }),
 
@@ -39128,79 +39592,68 @@ class DumbbellPlot {
 /*!****************************!*\
   !*** ./src/pdisp.index.js ***!
   \****************************/
-/*! no exports provided */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony import */ var d3__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
-/* harmony import */ var _dumbbell_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./dumbbell.js */ "./src/dumbbell.js");
 
 
+var _d = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
 
-d3__WEBPACK_IMPORTED_MODULE_0__["csv"]("data/bhw-prev-2015.csv")
-    .then(function(data){
+var d3 = _interopRequireWildcard(_d);
+
+var _dumbbell = __webpack_require__(/*! ./dumbbell.js */ "./src/dumbbell.js");
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) newObj[key] = obj[key]; } } newObj.default = obj; return newObj; } }
+
+d3.csv("data/bhw-prev-2015.csv").then(function (data) {
 
 	console.log("Prevalence data");
 
-	console.log( _dumbbell_js__WEBPACK_IMPORTED_MODULE_1__["DumbbellPlot"] );
+	console.log(_dumbbell.DumbbellPlot);
 
 	var width = 100,
 	    padding = 6,
 	    maxVal = 1600;
 
-	var container = d3__WEBPACK_IMPORTED_MODULE_0__["select"]("#container");
+	var container = d3.select("#container");
 
-	container.append("h7")
-	    .text("HIV prevalence")
+	container.append("h7").text("HIV prevalence");
 
-	container.append("p")
-	    .classed("small-text", true)
-	    .text("The number of people living with HIV per 100,000 population in 2015.");
+	container.append("p").classed("small-text", true).text("The number of people living with HIV per 100,000 population in 2015.");
 
 	var dbContainer = container.append("div");
 
-	var d = new _dumbbell_js__WEBPACK_IMPORTED_MODULE_1__["DumbbellPlot"]()
-	    .container(dbContainer)
-	    .scale(d3__WEBPACK_IMPORTED_MODULE_0__["scaleLinear"]()
-		   .domain([0, maxVal])
-		   .range([0 + padding, width - padding]))
-	    .width(width)
-	    .bells(data.map(function(d){
-		var ret = new _dumbbell_js__WEBPACK_IMPORTED_MODULE_1__["Bell"]()
-		ret.values([
-		    {"value":Number(d.white),
-		     "label":"White",
-		     "color":d3__WEBPACK_IMPORTED_MODULE_0__["interpolateBuPu"](0.25)},
-		    {"value":Number(d.hispanic),
-		     "label":"Hispanic/Latino",
-		     "color": d3__WEBPACK_IMPORTED_MODULE_0__["interpolateBuPu"](0.5)},
-		    {"value":Number(d.black),
-		     "label":"Black/African American",
-		     "color":d3__WEBPACK_IMPORTED_MODULE_0__["interpolateBuPu"](1)}
-		    
-		]);
-		ret.colors(function(d){ return d.color });
-		ret.leftLabel(d.ap)
+	var d = new _dumbbell.DumbbellPlot().container(dbContainer).scale(d3.scaleLinear().domain([0, maxVal]).range([0 + padding, width - padding])).width(width).bells(data.map(function (d) {
+		var ret = new _dumbbell.Bell();
+		ret.values([{ "value": Number(d.white),
+			"label": "White",
+			"color": d3.interpolateBuPu(0.25) }, { "value": Number(d.hispanic),
+			"label": "Hispanic/Latino",
+			"color": d3.interpolateBuPu(0.5) }, { "value": Number(d.black),
+			"label": "Black/African American",
+			"color": d3.interpolateBuPu(1) }]);
+		ret.colors(function (d) {
+			return d.color;
+		});
+		ret.leftLabel(d.ap);
 		// ret.rightLabel(Math.round(d.hispanic / d.white));
 		return ret;
-	    }))
-	    .width(100)
-	    // .height(100)
-	    .draw()
-	
-    });
-
+	})).width(100)
+	// .height(100)
+	.draw();
+});
 
 /***/ }),
 
 /***/ 2:
-/*!*************************************************!*\
-  !*** multi babel-polyfill ./src/pdisp.index.js ***!
-  \*************************************************/
+/*!**************************************************************!*\
+  !*** multi whatwg-fetch babel-polyfill ./src/pdisp.index.js ***!
+  \**************************************************************/
 /*! no static exports found */
 /***/ (function(module, exports, __webpack_require__) {
 
+__webpack_require__(/*! whatwg-fetch */"./node_modules/whatwg-fetch/fetch.js");
 __webpack_require__(/*! babel-polyfill */"./node_modules/babel-polyfill/lib/index.js");
 module.exports = __webpack_require__(/*! ./src/pdisp.index.js */"./src/pdisp.index.js");
 

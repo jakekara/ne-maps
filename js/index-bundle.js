@@ -41337,66 +41337,543 @@ module.exports = g;
 
 /***/ }),
 
+/***/ "./node_modules/whatwg-fetch/fetch.js":
+/*!********************************************!*\
+  !*** ./node_modules/whatwg-fetch/fetch.js ***!
+  \********************************************/
+/*! no static exports found */
+/***/ (function(module, exports) {
+
+(function(self) {
+  'use strict';
+
+  if (self.fetch) {
+    return
+  }
+
+  var support = {
+    searchParams: 'URLSearchParams' in self,
+    iterable: 'Symbol' in self && 'iterator' in Symbol,
+    blob: 'FileReader' in self && 'Blob' in self && (function() {
+      try {
+        new Blob()
+        return true
+      } catch(e) {
+        return false
+      }
+    })(),
+    formData: 'FormData' in self,
+    arrayBuffer: 'ArrayBuffer' in self
+  }
+
+  if (support.arrayBuffer) {
+    var viewClasses = [
+      '[object Int8Array]',
+      '[object Uint8Array]',
+      '[object Uint8ClampedArray]',
+      '[object Int16Array]',
+      '[object Uint16Array]',
+      '[object Int32Array]',
+      '[object Uint32Array]',
+      '[object Float32Array]',
+      '[object Float64Array]'
+    ]
+
+    var isDataView = function(obj) {
+      return obj && DataView.prototype.isPrototypeOf(obj)
+    }
+
+    var isArrayBufferView = ArrayBuffer.isView || function(obj) {
+      return obj && viewClasses.indexOf(Object.prototype.toString.call(obj)) > -1
+    }
+  }
+
+  function normalizeName(name) {
+    if (typeof name !== 'string') {
+      name = String(name)
+    }
+    if (/[^a-z0-9\-#$%&'*+.\^_`|~]/i.test(name)) {
+      throw new TypeError('Invalid character in header field name')
+    }
+    return name.toLowerCase()
+  }
+
+  function normalizeValue(value) {
+    if (typeof value !== 'string') {
+      value = String(value)
+    }
+    return value
+  }
+
+  // Build a destructive iterator for the value list
+  function iteratorFor(items) {
+    var iterator = {
+      next: function() {
+        var value = items.shift()
+        return {done: value === undefined, value: value}
+      }
+    }
+
+    if (support.iterable) {
+      iterator[Symbol.iterator] = function() {
+        return iterator
+      }
+    }
+
+    return iterator
+  }
+
+  function Headers(headers) {
+    this.map = {}
+
+    if (headers instanceof Headers) {
+      headers.forEach(function(value, name) {
+        this.append(name, value)
+      }, this)
+    } else if (Array.isArray(headers)) {
+      headers.forEach(function(header) {
+        this.append(header[0], header[1])
+      }, this)
+    } else if (headers) {
+      Object.getOwnPropertyNames(headers).forEach(function(name) {
+        this.append(name, headers[name])
+      }, this)
+    }
+  }
+
+  Headers.prototype.append = function(name, value) {
+    name = normalizeName(name)
+    value = normalizeValue(value)
+    var oldValue = this.map[name]
+    this.map[name] = oldValue ? oldValue+','+value : value
+  }
+
+  Headers.prototype['delete'] = function(name) {
+    delete this.map[normalizeName(name)]
+  }
+
+  Headers.prototype.get = function(name) {
+    name = normalizeName(name)
+    return this.has(name) ? this.map[name] : null
+  }
+
+  Headers.prototype.has = function(name) {
+    return this.map.hasOwnProperty(normalizeName(name))
+  }
+
+  Headers.prototype.set = function(name, value) {
+    this.map[normalizeName(name)] = normalizeValue(value)
+  }
+
+  Headers.prototype.forEach = function(callback, thisArg) {
+    for (var name in this.map) {
+      if (this.map.hasOwnProperty(name)) {
+        callback.call(thisArg, this.map[name], name, this)
+      }
+    }
+  }
+
+  Headers.prototype.keys = function() {
+    var items = []
+    this.forEach(function(value, name) { items.push(name) })
+    return iteratorFor(items)
+  }
+
+  Headers.prototype.values = function() {
+    var items = []
+    this.forEach(function(value) { items.push(value) })
+    return iteratorFor(items)
+  }
+
+  Headers.prototype.entries = function() {
+    var items = []
+    this.forEach(function(value, name) { items.push([name, value]) })
+    return iteratorFor(items)
+  }
+
+  if (support.iterable) {
+    Headers.prototype[Symbol.iterator] = Headers.prototype.entries
+  }
+
+  function consumed(body) {
+    if (body.bodyUsed) {
+      return Promise.reject(new TypeError('Already read'))
+    }
+    body.bodyUsed = true
+  }
+
+  function fileReaderReady(reader) {
+    return new Promise(function(resolve, reject) {
+      reader.onload = function() {
+        resolve(reader.result)
+      }
+      reader.onerror = function() {
+        reject(reader.error)
+      }
+    })
+  }
+
+  function readBlobAsArrayBuffer(blob) {
+    var reader = new FileReader()
+    var promise = fileReaderReady(reader)
+    reader.readAsArrayBuffer(blob)
+    return promise
+  }
+
+  function readBlobAsText(blob) {
+    var reader = new FileReader()
+    var promise = fileReaderReady(reader)
+    reader.readAsText(blob)
+    return promise
+  }
+
+  function readArrayBufferAsText(buf) {
+    var view = new Uint8Array(buf)
+    var chars = new Array(view.length)
+
+    for (var i = 0; i < view.length; i++) {
+      chars[i] = String.fromCharCode(view[i])
+    }
+    return chars.join('')
+  }
+
+  function bufferClone(buf) {
+    if (buf.slice) {
+      return buf.slice(0)
+    } else {
+      var view = new Uint8Array(buf.byteLength)
+      view.set(new Uint8Array(buf))
+      return view.buffer
+    }
+  }
+
+  function Body() {
+    this.bodyUsed = false
+
+    this._initBody = function(body) {
+      this._bodyInit = body
+      if (!body) {
+        this._bodyText = ''
+      } else if (typeof body === 'string') {
+        this._bodyText = body
+      } else if (support.blob && Blob.prototype.isPrototypeOf(body)) {
+        this._bodyBlob = body
+      } else if (support.formData && FormData.prototype.isPrototypeOf(body)) {
+        this._bodyFormData = body
+      } else if (support.searchParams && URLSearchParams.prototype.isPrototypeOf(body)) {
+        this._bodyText = body.toString()
+      } else if (support.arrayBuffer && support.blob && isDataView(body)) {
+        this._bodyArrayBuffer = bufferClone(body.buffer)
+        // IE 10-11 can't handle a DataView body.
+        this._bodyInit = new Blob([this._bodyArrayBuffer])
+      } else if (support.arrayBuffer && (ArrayBuffer.prototype.isPrototypeOf(body) || isArrayBufferView(body))) {
+        this._bodyArrayBuffer = bufferClone(body)
+      } else {
+        throw new Error('unsupported BodyInit type')
+      }
+
+      if (!this.headers.get('content-type')) {
+        if (typeof body === 'string') {
+          this.headers.set('content-type', 'text/plain;charset=UTF-8')
+        } else if (this._bodyBlob && this._bodyBlob.type) {
+          this.headers.set('content-type', this._bodyBlob.type)
+        } else if (support.searchParams && URLSearchParams.prototype.isPrototypeOf(body)) {
+          this.headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8')
+        }
+      }
+    }
+
+    if (support.blob) {
+      this.blob = function() {
+        var rejected = consumed(this)
+        if (rejected) {
+          return rejected
+        }
+
+        if (this._bodyBlob) {
+          return Promise.resolve(this._bodyBlob)
+        } else if (this._bodyArrayBuffer) {
+          return Promise.resolve(new Blob([this._bodyArrayBuffer]))
+        } else if (this._bodyFormData) {
+          throw new Error('could not read FormData body as blob')
+        } else {
+          return Promise.resolve(new Blob([this._bodyText]))
+        }
+      }
+
+      this.arrayBuffer = function() {
+        if (this._bodyArrayBuffer) {
+          return consumed(this) || Promise.resolve(this._bodyArrayBuffer)
+        } else {
+          return this.blob().then(readBlobAsArrayBuffer)
+        }
+      }
+    }
+
+    this.text = function() {
+      var rejected = consumed(this)
+      if (rejected) {
+        return rejected
+      }
+
+      if (this._bodyBlob) {
+        return readBlobAsText(this._bodyBlob)
+      } else if (this._bodyArrayBuffer) {
+        return Promise.resolve(readArrayBufferAsText(this._bodyArrayBuffer))
+      } else if (this._bodyFormData) {
+        throw new Error('could not read FormData body as text')
+      } else {
+        return Promise.resolve(this._bodyText)
+      }
+    }
+
+    if (support.formData) {
+      this.formData = function() {
+        return this.text().then(decode)
+      }
+    }
+
+    this.json = function() {
+      return this.text().then(JSON.parse)
+    }
+
+    return this
+  }
+
+  // HTTP methods whose capitalization should be normalized
+  var methods = ['DELETE', 'GET', 'HEAD', 'OPTIONS', 'POST', 'PUT']
+
+  function normalizeMethod(method) {
+    var upcased = method.toUpperCase()
+    return (methods.indexOf(upcased) > -1) ? upcased : method
+  }
+
+  function Request(input, options) {
+    options = options || {}
+    var body = options.body
+
+    if (input instanceof Request) {
+      if (input.bodyUsed) {
+        throw new TypeError('Already read')
+      }
+      this.url = input.url
+      this.credentials = input.credentials
+      if (!options.headers) {
+        this.headers = new Headers(input.headers)
+      }
+      this.method = input.method
+      this.mode = input.mode
+      if (!body && input._bodyInit != null) {
+        body = input._bodyInit
+        input.bodyUsed = true
+      }
+    } else {
+      this.url = String(input)
+    }
+
+    this.credentials = options.credentials || this.credentials || 'omit'
+    if (options.headers || !this.headers) {
+      this.headers = new Headers(options.headers)
+    }
+    this.method = normalizeMethod(options.method || this.method || 'GET')
+    this.mode = options.mode || this.mode || null
+    this.referrer = null
+
+    if ((this.method === 'GET' || this.method === 'HEAD') && body) {
+      throw new TypeError('Body not allowed for GET or HEAD requests')
+    }
+    this._initBody(body)
+  }
+
+  Request.prototype.clone = function() {
+    return new Request(this, { body: this._bodyInit })
+  }
+
+  function decode(body) {
+    var form = new FormData()
+    body.trim().split('&').forEach(function(bytes) {
+      if (bytes) {
+        var split = bytes.split('=')
+        var name = split.shift().replace(/\+/g, ' ')
+        var value = split.join('=').replace(/\+/g, ' ')
+        form.append(decodeURIComponent(name), decodeURIComponent(value))
+      }
+    })
+    return form
+  }
+
+  function parseHeaders(rawHeaders) {
+    var headers = new Headers()
+    // Replace instances of \r\n and \n followed by at least one space or horizontal tab with a space
+    // https://tools.ietf.org/html/rfc7230#section-3.2
+    var preProcessedHeaders = rawHeaders.replace(/\r?\n[\t ]+/g, ' ')
+    preProcessedHeaders.split(/\r?\n/).forEach(function(line) {
+      var parts = line.split(':')
+      var key = parts.shift().trim()
+      if (key) {
+        var value = parts.join(':').trim()
+        headers.append(key, value)
+      }
+    })
+    return headers
+  }
+
+  Body.call(Request.prototype)
+
+  function Response(bodyInit, options) {
+    if (!options) {
+      options = {}
+    }
+
+    this.type = 'default'
+    this.status = options.status === undefined ? 200 : options.status
+    this.ok = this.status >= 200 && this.status < 300
+    this.statusText = 'statusText' in options ? options.statusText : 'OK'
+    this.headers = new Headers(options.headers)
+    this.url = options.url || ''
+    this._initBody(bodyInit)
+  }
+
+  Body.call(Response.prototype)
+
+  Response.prototype.clone = function() {
+    return new Response(this._bodyInit, {
+      status: this.status,
+      statusText: this.statusText,
+      headers: new Headers(this.headers),
+      url: this.url
+    })
+  }
+
+  Response.error = function() {
+    var response = new Response(null, {status: 0, statusText: ''})
+    response.type = 'error'
+    return response
+  }
+
+  var redirectStatuses = [301, 302, 303, 307, 308]
+
+  Response.redirect = function(url, status) {
+    if (redirectStatuses.indexOf(status) === -1) {
+      throw new RangeError('Invalid status code')
+    }
+
+    return new Response(null, {status: status, headers: {location: url}})
+  }
+
+  self.Headers = Headers
+  self.Request = Request
+  self.Response = Response
+
+  self.fetch = function(input, init) {
+    return new Promise(function(resolve, reject) {
+      var request = new Request(input, init)
+      var xhr = new XMLHttpRequest()
+
+      xhr.onload = function() {
+        var options = {
+          status: xhr.status,
+          statusText: xhr.statusText,
+          headers: parseHeaders(xhr.getAllResponseHeaders() || '')
+        }
+        options.url = 'responseURL' in xhr ? xhr.responseURL : options.headers.get('X-Request-URL')
+        var body = 'response' in xhr ? xhr.response : xhr.responseText
+        resolve(new Response(body, options))
+      }
+
+      xhr.onerror = function() {
+        reject(new TypeError('Network request failed'))
+      }
+
+      xhr.ontimeout = function() {
+        reject(new TypeError('Network request failed'))
+      }
+
+      xhr.open(request.method, request.url, true)
+
+      if (request.credentials === 'include') {
+        xhr.withCredentials = true
+      } else if (request.credentials === 'omit') {
+        xhr.withCredentials = false
+      }
+
+      if ('responseType' in xhr && support.blob) {
+        xhr.responseType = 'blob'
+      }
+
+      request.headers.forEach(function(value, name) {
+        xhr.setRequestHeader(name, value)
+      })
+
+      xhr.send(typeof request._bodyInit === 'undefined' ? null : request._bodyInit)
+    })
+  }
+  self.fetch.polyfill = true
+})(typeof self !== 'undefined' ? self : this);
+
+
+/***/ }),
+
 /***/ "./src/accessor.js":
 /*!*************************!*\
   !*** ./src/accessor.js ***!
   \*************************/
-/*! exports provided: addAccessor, addAccessors, addDescribedAccessor, accessor */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "addAccessor", function() { return addAccessor; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "addAccessors", function() { return addAccessors; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "addDescribedAccessor", function() { return addDescribedAccessor; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "accessor", function() { return accessor; });
-const accessor = function(symb, v){
 
-    if (typeof(symb) !== "undefined") {
-	this[symb] = v;
+
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+var accessor = function accessor(symb, v) {
+
+    if (typeof symb !== "undefined") {
+        this[symb] = v;
     }
 
-    return function(v){
-	if (typeof(v) === "undefined") {
-	    return this[symb];
-	}
-	this[symb] = v;
-	return this;
-    }
-}
+    return function (v) {
+        if (typeof v === "undefined") {
+            return this[symb];
+        }
+        this[symb] = v;
+        return this;
+    };
+};
 
-const addAccessor = function(context, name, symbol, v){
+var addAccessor = function addAccessor(context, name, symbol, v) {
 
     context[name] = accessor.call(context, symbol, v);
-}
+};
 
-const addDescribedAccessor = function(context, description){
+var addDescribedAccessor = function addDescribedAccessor(context, description) {
 
     // context is required
-    
+
     // required
-    const name = description.name;
+    var name = description.name;
 
     // default symbol name
-    const symbol = description.symbol || "__" + name;
+    var symbol = description.symbol || "__" + name;
 
     // undefined is OK
-    const v = description.def;
+    var v = description.def;
 
     addAccessor(context, name, symbol, v);
-    
-}
+};
 
-const addAccessors = function(context, descriptions){
+var addAccessors = function addAccessors(context, descriptions) {
 
-    descriptions.forEach(desc => {
-	addDescribedAccessor(context, desc);
+    descriptions.forEach(function (desc) {
+        addDescribedAccessor(context, desc);
     });
-    
-}
+};
 
- 
-
+exports.addAccessor = addAccessor;
+exports.addAccessors = addAccessors;
+exports.addDescribedAccessor = addDescribedAccessor;
+exports.accessor = accessor;
 
 /***/ }),
 
@@ -41404,42 +41881,58 @@ const addAccessors = function(context, descriptions){
 /*!***************************!*\
   !*** ./src/choropleth.js ***!
   \***************************/
-/*! exports provided: Choropleth */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Choropleth", function() { return Choropleth; });
-/* harmony import */ var _interactive_map_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./interactive-map.js */ "./src/interactive-map.js");
-/* harmony import */ var _accessor_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./accessor.js */ "./src/accessor.js");
 
 
+Object.defineProperty(exports, "__esModule", {
+			value: true
+});
+exports.Choropleth = undefined;
 
-class Choropleth extends _interactive_map_js__WEBPACK_IMPORTED_MODULE_0__["InteractiveMap"] {
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
-    constructor(){
-	super()
+var _interactiveMap = __webpack_require__(/*! ./interactive-map.js */ "./src/interactive-map.js");
 
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "colorContext", "__color_context", function(c,_){
-	    c.fillStyle = "#999";
-	    return c;
-	});
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_1__["addAccessor"])(this, "subset", "__subset");
-	
-    }
+var _accessor = __webpack_require__(/*! ./accessor.js */ "./src/accessor.js");
 
-    drawChoropleth(){
-	this.drawObjects(
-	    this.subset(),
-	    this.colorContext()
-	);
-	return this;
-    }
-    
-}
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
+function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
 
+function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
 
+var Choropleth = function (_InteractiveMap) {
+			_inherits(Choropleth, _InteractiveMap);
+
+			function Choropleth() {
+						_classCallCheck(this, Choropleth);
+
+						var _this = _possibleConstructorReturn(this, (Choropleth.__proto__ || Object.getPrototypeOf(Choropleth)).call(this));
+
+						(0, _accessor.addAccessor)(_this, "colorContext", "__color_context", function (c, _) {
+									c.fillStyle = "#999";
+									return c;
+						});
+						(0, _accessor.addAccessor)(_this, "subset", "__subset");
+
+						return _this;
+			}
+
+			_createClass(Choropleth, [{
+						key: "drawChoropleth",
+						value: function drawChoropleth() {
+									this.drawObjects(this.subset(), this.colorContext());
+									return this;
+						}
+			}]);
+
+			return Choropleth;
+}(_interactiveMap.InteractiveMap);
+
+exports.Choropleth = Choropleth;
 
 /***/ }),
 
@@ -41447,30 +41940,34 @@ class Choropleth extends _interactive_map_js__WEBPACK_IMPORTED_MODULE_0__["Inter
 /*!**********************!*\
   !*** ./src/index.js ***!
   \**********************/
-/*! no exports provided */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony import */ var _choropleth_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./choropleth.js */ "./src/choropleth.js");
-/* harmony import */ var d3__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
-/* harmony import */ var topojson__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! topojson */ "./node_modules/topojson/index.js");
-/* harmony import */ var _noisemaker_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./noisemaker.js */ "./src/noisemaker.js");
-/* harmony import */ var _topo_helper_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./topo-helper.js */ "./src/topo-helper.js");
-/* harmony import */ var _new_england_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./new-england.js */ "./src/new-england.js");
+
+
+var _choropleth = __webpack_require__(/*! ./choropleth.js */ "./src/choropleth.js");
+
+var _d = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
+
+var d3 = _interopRequireWildcard(_d);
+
+var _topojson = __webpack_require__(/*! topojson */ "./node_modules/topojson/index.js");
+
+var topojson = _interopRequireWildcard(_topojson);
+
+var _noisemaker = __webpack_require__(/*! ./noisemaker.js */ "./src/noisemaker.js");
+
+var _topoHelper = __webpack_require__(/*! ./topo-helper.js */ "./src/topo-helper.js");
+
+var _newEngland = __webpack_require__(/*! ./new-england.js */ "./src/new-england.js");
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) newObj[key] = obj[key]; } } newObj.default = obj; return newObj; } }
+
 // import { InteractiveMap } from "./interactive-map.js";
-
-
-
-
-
-
-
 console.log("Hello, from index.js!");
 
-Promise.all([d3__WEBPACK_IMPORTED_MODULE_1__["json"]("shapes/us-2017.json"),
-	     d3__WEBPACK_IMPORTED_MODULE_1__["csv"]("data/us-county-prev-2014.csv")])
-    .then(function(vals){
+Promise.all([d3.json("shapes/us-2017.json"), d3.csv("data/us-county-prev-2014.csv")]).then(function (vals) {
 
 	var topodata = vals[0],
 	    data = vals[1];
@@ -41482,176 +41979,154 @@ Promise.all([d3__WEBPACK_IMPORTED_MODULE_1__["json"]("shapes/us-2017.json"),
 	var width = 300,
 	    height = width * 1.34;
 
-	var counties = topodata.objects.counties// cb_2017_us_county_20m;
-	var states = topodata.objects.states
+	var counties = topodata.objects.counties; // cb_2017_us_county_20m;
+	var states = topodata.objects.states;
 
-	var newEnglandFilter = function(d){
-	    return Object(_new_england_js__WEBPACK_IMPORTED_MODULE_5__["isNewEnglandFips"])(d.id.slice(0,2));
-	}
+	var newEnglandFilter = function newEnglandFilter(d) {
+		return (0, _newEngland.isNewEnglandFips)(d.id.slice(0, 2));
+	};
 
-	var noFilter = function(_){ return true; };
+	var noFilter = function noFilter(_) {
+		return true;
+	};
 
 	// var ctFilter = function(d){ return d.properties.STATEFP === "09"; }
 
-	var neProjection = d3__WEBPACK_IMPORTED_MODULE_1__["geoMercator"]()
-	    .fitSize([width, height],
-		     topojson__WEBPACK_IMPORTED_MODULE_2__["mesh"](topodata,
-				   counties,
-				   newEnglandFilter));
+	var neProjection = d3.geoMercator().fitSize([width, height], topojson.mesh(topodata, counties, newEnglandFilter));
 
-	var outlineContext = function(c, _){
-	    c.lineWidth = 2;
-	    c.fillStyle = "rgba(0,0,0,0)";
-	    c.strokeStyle = "white";// rgba(255,255,255,1)";
-	    // c.lineWidth = 0;
-	    return c;
-	}
+	var outlineContext = function outlineContext(c, _) {
+		c.lineWidth = 2;
+		c.fillStyle = "rgba(0,0,0,0)";
+		c.strokeStyle = "white"; // rgba(255,255,255,1)";
+		// c.lineWidth = 0;
+		return c;
+	};
 
 	// get the data from the spreadsheet
-	var getData = function(geoid){
-	    var matches = data.filter(function(a){
-		return a[id_col] === geoid;
-	    });
+	var getData = function getData(geoid) {
+		var matches = data.filter(function (a) {
+			return a[id_col] === geoid;
+		});
 
-	    if (matches.length !== 1){ return ; }
-	    return matches[0];
-	}
+		if (matches.length !== 1) {
+			return;
+		}
+		return matches[0];
+	};
 
 	// data = data.filter(function(a){
 	//     console.log("is new england fips?", a[id_col].substring(0,2))
 	//     return isNewEnglandFips(a[id_col].substring(0,2))
 	// });
 
-	var rateExtent = d3__WEBPACK_IMPORTED_MODULE_1__["extent"](data.map( d => Number(d[data_col]) ));
+	var rateExtent = d3.extent(data.map(function (d) {
+		return Number(d[data_col]);
+	}));
 
 	// rateExtent = [0, 500];
 	console.log("rateExtent", rateExtent);
 
-	var rateScale = d3__WEBPACK_IMPORTED_MODULE_1__["scaleLinear"]()
+	var rateScale = d3.scaleLinear()
 	// .domain(rateExtent)
-	    .domain([0, 1000])
-	    .range([0,1]);
+	.domain([0, 1000]).range([0, 1]);
 
-	var valScale = function(val){
-	    return d3__WEBPACK_IMPORTED_MODULE_1__["interpolateReds"](rateScale(val));
-	}
+	var valScale = function valScale(val) {
+		return d3.interpolateReds(rateScale(val));
+	};
 
-	var rate = function (geoid){
-	    var ret =  getData(geoid)[data_col] || "#fff";
-	    return ret;
-	}
+	var rate = function rate(geoid) {
+		var ret = getData(geoid)[data_col] || "#fff";
+		return ret;
+	};
 
-	var colorContext =  function(c, d){
+	var colorContext = function colorContext(c, d) {
 
-	    c.lineWidth = 0.3;
+		c.lineWidth = 0.3;
 
-	    var val = Math.random()
+		var val = Math.random();
 
-	    // c.fillStyle = d3.interpolateOranges(Math.random());
-	    // c.fillStyle = d3.interpolateGreys(Math.random());
+		// c.fillStyle = d3.interpolateOranges(Math.random());
+		// c.fillStyle = d3.interpolateGreys(Math.random());
 
-	    var placeData = getData(d.id) || {};
-	    var placeRate = Number(placeData[data_col]) || -1;
+		var placeData = getData(d.id) || {};
+		var placeRate = Number(placeData[data_col]) || -1;
 
-	    // var val = rateScale(placeRate);
-	    // val = rateScale(500);// getRate(d.GEOID));
-	    
-	    // var color =  d3.interpolateReds(val);
-	    var color = valScale(placeRate);
+		// var val = rateScale(placeRate);
+		// val = rateScale(500);// getRate(d.GEOID));
 
-	    if (placeRate === -1){ color = "#fff"; }
-	    
-	    c.fillStyle = color;
-	    c.strokeStyle = color;
-	    
-	    return c;
-	    
-	}
+		// var color =  d3.interpolateReds(val);
+		var color = valScale(placeRate);
 
-	var newEnglandCounties = Object(_topo_helper_js__WEBPACK_IMPORTED_MODULE_4__["objectSubset"])(topodata, counties, newEnglandFilter);
-	var allCounties = Object(_topo_helper_js__WEBPACK_IMPORTED_MODULE_4__["objectSubset"])(topodata, counties, noFilter);
-	var allStateShapes = Object(_topo_helper_js__WEBPACK_IMPORTED_MODULE_4__["objectSubset"])(topodata, states, noFilter);
-	var newEnglandStateShapes = Object(_topo_helper_js__WEBPACK_IMPORTED_MODULE_4__["objectSubset"])(topodata, states, function(d){
-	    return Object(_new_england_js__WEBPACK_IMPORTED_MODULE_5__["isNewEnglandFips"])(d.id.slice(0,2));
-	})
-	
-	var c = new _choropleth_js__WEBPACK_IMPORTED_MODULE_0__["Choropleth"]()
-	    .width(width)
-	    .height(height)
+		if (placeRate === -1) {
+			color = "#fff";
+		}
+
+		c.fillStyle = color;
+		c.strokeStyle = color;
+
+		return c;
+	};
+
+	var newEnglandCounties = (0, _topoHelper.objectSubset)(topodata, counties, newEnglandFilter);
+	var allCounties = (0, _topoHelper.objectSubset)(topodata, counties, noFilter);
+	var allStateShapes = (0, _topoHelper.objectSubset)(topodata, states, noFilter);
+	var newEnglandStateShapes = (0, _topoHelper.objectSubset)(topodata, states, function (d) {
+		return (0, _newEngland.isNewEnglandFips)(d.id.slice(0, 2));
+	});
+
+	var c = new _choropleth.Choropleth().width(width).height(height)
 	// .projection(usProjection(topodata, width, height))
-	    .projection(neProjection)
-	    .container(d3__WEBPACK_IMPORTED_MODULE_1__["select"]("#container"))
+	.projection(neProjection).container(d3.select("#container"))
 	// .subset(allCounties)
-	    .subset(newEnglandCounties)
-	    .colorContext(colorContext)
-	    .init()	
-	    .drawChoropleth();
+	.subset(newEnglandCounties).colorContext(colorContext).init().drawChoropleth();
 
 	// var interiors = topojson.mesh(topodata, states,
 	// 			      function(a, b) { return a !== b; });
-	var interiors = topojson__WEBPACK_IMPORTED_MODULE_2__["mesh"](topodata, states,
-				      function(a, b) { return a !== b; });
-	
+	var interiors = topojson.mesh(topodata, states, function (a, b) {
+		return a !== b;
+	});
+
 	c.drawObjects([interiors], outlineContext);
 	// c.drawObjects(newEnglandCounties, colorContext);
 
 	// new NoiseMaker(c.canvas).draw(0.25);
 
-	var message = d3__WEBPACK_IMPORTED_MODULE_1__["select"]("#container").append("div").classed("message", true);
-	
-	c.onMouseOver(function(countyList){
-	    if (countyList.length < 1){
-		message.html("");
-		return;
-	    }
-	    message.html(countyList[0].id)// properties.NAME);
-	    console.log(getData(countyList[0].id));
+	var message = d3.select("#container").append("div").classed("message", true);
+
+	c.onMouseOver(function (countyList) {
+		if (countyList.length < 1) {
+			message.html("");
+			return;
+		}
+		message.html(countyList[0].id); // properties.NAME);
+		console.log(getData(countyList[0].id));
 	}, newEnglandCounties);
 
 	// Draw a legend
-	const legend_width = width,
-	      legend_steps = 100,
-	      legend_height = 40;
+	var legend_width = width,
+	    legend_steps = 100,
+	    legend_height = 40;
 
-	var legend_svg = d3__WEBPACK_IMPORTED_MODULE_1__["select"]("#container")
-	    .append("svg")
-	    .attr("width", legend_width)
-	    .attr("height", legend_height);
-	
-	var legend = legend_svg
-	    .append("g")
-	    .classed("legend", true)
-	    .attr("width", legend_width)
-	    .attr("height", legend_height)
-	    .attr("transform", "translate(0," + legend_height / 2 + ")")
-	
-	var legend_scale = d3__WEBPACK_IMPORTED_MODULE_1__["scaleLinear"]()
-	    .range([10, legend_width - 10])
+	var legend_svg = d3.select("#container").append("svg").attr("width", legend_width).attr("height", legend_height);
+
+	var legend = legend_svg.append("g").classed("legend", true).attr("width", legend_width).attr("height", legend_height).attr("transform", "translate(0," + legend_height / 2 + ")");
+
+	var legend_scale = d3.scaleLinear().range([10, legend_width - 10])
 	// .domain([0,rateExtent[1]])
-	    .domain([0, 1000]);
+	.domain([0, 1000]);
 
-	var legend_axis = d3__WEBPACK_IMPORTED_MODULE_1__["axisBottom"]()
-	    .scale(legend_scale)
+	var legend_axis = d3.axisBottom().scale(legend_scale);
 
-	var legend_rects = legend_svg.append("g").selectAll("rect")
-	    .data(d3__WEBPACK_IMPORTED_MODULE_1__["range"](0,legend_steps))
-	    .enter()
-	    .append("rect")
-	    .attr("width", legend_width / legend_steps)
-	    .attr("height", legend_height / 2)
-	    .attr("x", function(v, i){ return 10 +  i * ((legend_width - 20) / legend_steps);})
-	    .style("fill", function(v, i){
-		return  d3__WEBPACK_IMPORTED_MODULE_1__["interpolateReds"](i / legend_steps);
-	    })
-	    .style("stroke", function(v, i){
-		return  d3__WEBPACK_IMPORTED_MODULE_1__["interpolateReds"](i / legend_steps);
-	    });
-	
-	
-	legend.call(legend_axis)
-	
-    });
+	var legend_rects = legend_svg.append("g").selectAll("rect").data(d3.range(0, legend_steps)).enter().append("rect").attr("width", legend_width / legend_steps).attr("height", legend_height / 2).attr("x", function (v, i) {
+		return 10 + i * ((legend_width - 20) / legend_steps);
+	}).style("fill", function (v, i) {
+		return d3.interpolateReds(i / legend_steps);
+	}).style("stroke", function (v, i) {
+		return d3.interpolateReds(i / legend_steps);
+	});
 
+	legend.call(legend_axis);
+});
 
 /***/ }),
 
@@ -41659,55 +42134,77 @@ Promise.all([d3__WEBPACK_IMPORTED_MODULE_1__["json"]("shapes/us-2017.json"),
 /*!********************************!*\
   !*** ./src/interactive-map.js ***!
   \********************************/
-/*! exports provided: InteractiveMap */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "InteractiveMap", function() { return InteractiveMap; });
-/* harmony import */ var d3__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
-/* harmony import */ var _map_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./map.js */ "./src/map.js");
-/* harmony import */ var _accessor_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./accessor.js */ "./src/accessor.js");
 
 
+Object.defineProperty(exports, "__esModule", {
+			value: true
+});
+exports.InteractiveMap = undefined;
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+var _d = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
+
+var d3 = _interopRequireWildcard(_d);
+
+var _map = __webpack_require__(/*! ./map.js */ "./src/map.js");
+
+var _accessor = __webpack_require__(/*! ./accessor.js */ "./src/accessor.js");
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) newObj[key] = obj[key]; } } newObj.default = obj; return newObj; } }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+var InteractiveMap = function (_Map) {
+			_inherits(InteractiveMap, _Map);
+
+			function InteractiveMap() {
+						_classCallCheck(this, InteractiveMap);
+
+						return _possibleConstructorReturn(this, (InteractiveMap.__proto__ || Object.getPrototypeOf(InteractiveMap)).call(this));
+			}
+
+			_createClass(InteractiveMap, [{
+						key: "onMouseOver",
+						value: function onMouseOver(hoverCallback, objects) {
+									var that = this;
+									d3.select(this.canvas).on("mousemove", function (d) {
+
+												var rect = this.getBoundingClientRect(),
+												    scaleX = function scaleX(x) {
+															return x;
+												},
+												    scaleY = function scaleY(y) {
+															return y;
+												},
 
 
-class InteractiveMap  extends _map_js__WEBPACK_IMPORTED_MODULE_1__["Map"] {
+												// this was breaking on zoom, doesn't seen necessary
+												// scaleX = x => x * (this.width / rect.width),
+												// scaleY = y => y * (this.height / rect.height),
 
-    constructor(){
-	super()
-    }
+												x = scaleX(d3.event.clientX - rect.left),
+												    y = scaleY(d3.event.layerY - rect.top);
 
-    onMouseOver(hoverCallback, objects){
-	var that = this;
-	d3__WEBPACK_IMPORTED_MODULE_0__["select"](this.canvas).on("mousemove", function(d){
+												console.log(that.devicePixelRatio, this.width / rect.width, x, y);
 
+												hoverCallback(that.objectAtCoords(objects, x, y));
+									});
+						}
+			}]);
 
+			return InteractiveMap;
+}(_map.Map);
 
-	    var rect = this.getBoundingClientRect(),
-		scaleX = x => x,
-		scaleY = y => y,
-
-		// this was breaking on zoom, doesn't seen necessary
-		// scaleX = x => x * (this.width / rect.width),
-		// scaleY = y => y * (this.height / rect.height),
-		
-		x = scaleX(d3__WEBPACK_IMPORTED_MODULE_0__["event"].clientX - rect.left),
-		y = scaleY(d3__WEBPACK_IMPORTED_MODULE_0__["event"].layerY - rect.top);
-
-	    console.log(that.devicePixelRatio,
-			this.width / rect.width,
-			x, y);
-
-	    hoverCallback(that.objectAtCoords(objects, x, y));
-
-	})
-    };
-    
-}
-
-
-
+exports.InteractiveMap = InteractiveMap;
 
 /***/ }),
 
@@ -41715,92 +42212,103 @@ class InteractiveMap  extends _map_js__WEBPACK_IMPORTED_MODULE_1__["Map"] {
 /*!********************!*\
   !*** ./src/map.js ***!
   \********************/
-/*! exports provided: Map */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Map", function() { return Map; });
-/* harmony import */ var d3__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
-/* harmony import */ var topojson__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! topojson */ "./node_modules/topojson/index.js");
-/* harmony import */ var _accessor_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./accessor.js */ "./src/accessor.js");
 
 
+Object.defineProperty(exports, "__esModule", {
+			value: true
+});
+exports.Map = undefined;
 
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+var _d = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
+
+var d3 = _interopRequireWildcard(_d);
+
+var _topojson = __webpack_require__(/*! topojson */ "./node_modules/topojson/index.js");
+
+var topojson = _interopRequireWildcard(_topojson);
+
+var _accessor = __webpack_require__(/*! ./accessor.js */ "./src/accessor.js");
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) newObj[key] = obj[key]; } } newObj.default = obj; return newObj; } }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 console.log("Hello, from choropleth.js!");
 
-class Map {
+var Map = function () {
+			function Map() {
+						_classCallCheck(this, Map);
 
-    constructor(){
+						(0, _accessor.addAccessor)(this, "container", "__container");
+						(0, _accessor.addAccessor)(this, "width", "__width", 100);
+						(0, _accessor.addAccessor)(this, "height", "__height", 100);
+						(0, _accessor.addAccessor)(this, "projection", "__projection", d3.geoAlbersUsa());
+			}
 
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_2__["addAccessor"])(this, "container", "__container");
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_2__["addAccessor"])(this, "width", "__width", 100);
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_2__["addAccessor"])(this, "height", "__height", 100);
-	Object(_accessor_js__WEBPACK_IMPORTED_MODULE_2__["addAccessor"])(this, "projection", "__projection", d3__WEBPACK_IMPORTED_MODULE_0__["geoAlbersUsa"]());
-	
-    }
+			_createClass(Map, [{
+						key: "init",
+						value: function init() {
+									this.container().html("");
 
-    init(){
-	this.container().html("");
+									// retina
+									this.devicePixelRatio = window.devicePixelRatio || 1;
+									console.log("dpr", this.devicePixelRatio);
 
-	// retina
-	this.devicePixelRatio = window.devicePixelRatio || 1;
-	console.log("dpr", this.devicePixelRatio);
+									this.canvas = this.container().append("canvas").attr("width", this.width() * this.devicePixelRatio).attr("height", this.height() * this.devicePixelRatio).style("width", this.width() + "px").style("height", this.height() + "px").node();
 
-	this.canvas = this.container().append("canvas")
-	    .attr("width", this.width() * this.devicePixelRatio)
-	    .attr("height", this.height() * this.devicePixelRatio)
-	    .style("width", this.width() + "px")
-	    .style("height", this.height() + "px").node();
+									this.context = this.canvas.getContext("2d");
+									this.context.scale(this.devicePixelRatio, this.devicePixelRatio);
 
-	this.context = this.canvas.getContext("2d");
-	this.context.scale(this.devicePixelRatio, this.devicePixelRatio);
+									this.path = d3.geoPath().projection(this.projection()).context(this.context);
 
-	this.path = d3__WEBPACK_IMPORTED_MODULE_0__["geoPath"]()
-	    .projection(this.projection())
-	    .context(this.context);
+									return this;
+						}
+			}, {
+						key: "coords",
+						value: function coords(x, y) {
 
-	return this;
-    }
+									return this.projection().invert([x, y]);
+						}
+			}, {
+						key: "objectAtCoords",
+						value: function objectAtCoords(objects, x, y) {
 
-    coords(x, y){
+									var coords = this.coords(x, y);
 
-	return this.projection().invert([x,y])
-	
-    }
+									var ret = objects.filter(function (obj) {
+												return d3.geoContains(obj, coords);
+									});
 
-    objectAtCoords(objects, x, y){
+									return ret;
+						}
+			}, {
+						key: "drawObjects",
+						value: function drawObjects(objects, context) {
 
-	var coords = this.coords(x, y);
+									var that = this;
 
-	var ret = objects.filter(function(obj){
-	    return (d3__WEBPACK_IMPORTED_MODULE_0__["geoContains"](obj, coords));
-	});
+									objects.forEach(function (d) {
+												that.context = context(that.context, d);
+												that.context.beginPath();
+												that.path(d);
+												that.context.fill();
+												that.context.stroke();
+									});
 
-	return ret;
+									return this;
+						}
+			}]);
 
-    }
+			return Map;
+}();
 
-    drawObjects(objects, context){
-	
-	var that = this;
-	
-	objects.forEach(function(d) {
-	    that.context = context(that.context, d);	    
-	    that.context.beginPath();
-	    that.path(d);
-	    that.context.fill();
-	    that.context.stroke();
-	});
-
-	return this;
-    }
-
-}
-
-
-
+exports.Map = Map;
 
 /***/ }),
 
@@ -41808,29 +42316,28 @@ class Map {
 /*!****************************!*\
   !*** ./src/new-england.js ***!
   \****************************/
-/*! exports provided: isNewEnglandFips */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "isNewEnglandFips", function() { return isNewEnglandFips; });
-var newEnglandFips =
-    [
-	"09", // CT
-	"44", // RI
-	"25", // MASS
-	"23", // MAINE
-	"33", // New Hampshire
-	"50", // VERMONT
-    ];
 
-function isNewEnglandFips(fips){
 
-    return newEnglandFips.indexOf(fips) >= 0;
+Object.defineProperty(exports, "__esModule", {
+				value: true
+});
+var newEnglandFips = ["09", // CT
+"44", // RI
+"25", // MASS
+"23", // MAINE
+"33", // New Hampshire
+"50"];
+
+function isNewEnglandFips(fips) {
+
+				return newEnglandFips.indexOf(fips) >= 0;
 }
 
-
-
+exports.isNewEnglandFips = isNewEnglandFips;
 
 /***/ }),
 
@@ -41838,41 +42345,55 @@ function isNewEnglandFips(fips){
 /*!***************************!*\
   !*** ./src/noisemaker.js ***!
   \***************************/
-/*! exports provided: NoiseMaker */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "NoiseMaker", function() { return NoiseMaker; });
-class NoiseMaker {
-    constructor(canvas){
-	this.canvas = canvas;
-    }
-
-    draw(thresh){
-
-	var thresh = thresh || 0.5;
-	var context = this.canvas.getContext("2d");
-	console.log("canvas", this.canvas.width, this.canvas.height);
-
-	var x, y;
-	context.filter = 'blur(1px)';
-	context.fillStyle = "rgba(255,255,255,0.8)";
-	
-	for (var x = 0; x < this.canvas.width; x++){
-	    for (var y = 0; y < this.canvas.height; y+=5){
-		// if (Math.random() > thresh) { continue; }
-		// if (x % 2 === 0 && y %2 !== 0 ){ continue }
-		context.fillRect(x, y, 1, 1);
-	    }
-	}
-
-	context.filter = "none";
-    }
-}
 
 
+Object.defineProperty(exports, "__esModule", {
+			value: true
+});
 
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+var NoiseMaker = function () {
+			function NoiseMaker(canvas) {
+						_classCallCheck(this, NoiseMaker);
+
+						this.canvas = canvas;
+			}
+
+			_createClass(NoiseMaker, [{
+						key: "draw",
+						value: function draw(thresh) {
+
+									var thresh = thresh || 0.5;
+									var context = this.canvas.getContext("2d");
+									console.log("canvas", this.canvas.width, this.canvas.height);
+
+									var x, y;
+									context.filter = 'blur(1px)';
+									context.fillStyle = "rgba(255,255,255,0.8)";
+
+									for (var x = 0; x < this.canvas.width; x++) {
+												for (var y = 0; y < this.canvas.height; y += 5) {
+															// if (Math.random() > thresh) { continue; }
+															// if (x % 2 === 0 && y %2 !== 0 ){ continue }
+															context.fillRect(x, y, 1, 1);
+												}
+									}
+
+									context.filter = "none";
+						}
+			}]);
+
+			return NoiseMaker;
+}();
+
+exports.NoiseMaker = NoiseMaker;
 
 /***/ }),
 
@@ -41880,44 +42401,49 @@ class NoiseMaker {
 /*!****************************!*\
   !*** ./src/topo-helper.js ***!
   \****************************/
-/*! exports provided: usProjection, objectSubset */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "usProjection", function() { return usProjection; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "objectSubset", function() { return objectSubset; });
-/* harmony import */ var d3__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
-/* harmony import */ var topojson__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! topojson */ "./node_modules/topojson/index.js");
 
 
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+exports.objectSubset = exports.usProjection = undefined;
 
-function usProjection(topodata, width, height){
+var _d = __webpack_require__(/*! d3 */ "./node_modules/d3/index.js");
 
-    return d3__WEBPACK_IMPORTED_MODULE_0__["geoAlbersUsa"]()
-	.fitSize([width, height],
-		 topojson__WEBPACK_IMPORTED_MODULE_1__["mesh"](topodata))
-    
+var d3 = _interopRequireWildcard(_d);
+
+var _topojson = __webpack_require__(/*! topojson */ "./node_modules/topojson/index.js");
+
+var topojson = _interopRequireWildcard(_topojson);
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) newObj[key] = obj[key]; } } newObj.default = obj; return newObj; } }
+
+function usProjection(topodata, width, height) {
+
+    return d3.geoAlbersUsa().fitSize([width, height], topojson.mesh(topodata));
 }
 
-function objectSubset (topodata, objects, filter){
-    return topojson__WEBPACK_IMPORTED_MODULE_1__["feature"](topodata, objects)
-    	.features.filter(filter);
+function objectSubset(topodata, objects, filter) {
+    return topojson.feature(topodata, objects).features.filter(filter);
 }
 
-
-
-
+exports.usProjection = usProjection;
+exports.objectSubset = objectSubset;
 
 /***/ }),
 
 /***/ 0:
-/*!*******************************************!*\
-  !*** multi babel-polyfill ./src/index.js ***!
-  \*******************************************/
+/*!********************************************************!*\
+  !*** multi whatwg-fetch babel-polyfill ./src/index.js ***!
+  \********************************************************/
 /*! no static exports found */
 /***/ (function(module, exports, __webpack_require__) {
 
+__webpack_require__(/*! whatwg-fetch */"./node_modules/whatwg-fetch/fetch.js");
 __webpack_require__(/*! babel-polyfill */"./node_modules/babel-polyfill/lib/index.js");
 module.exports = __webpack_require__(/*! ./src/index.js */"./src/index.js");
 
