@@ -6,6 +6,21 @@ import { BarChart } from "./barchart.js";
 /** Class representing a line cahrt */
 class LineChart extends BarChart {
 
+
+    initiateScales(){
+    	this.plot.xScale = d3.scalePoint();	
+    	this.plot.yScale = d3.scaleLinear();
+    }
+    
+    // constructor(plot){
+    // 	super(plot)
+
+    // 	// TODO - Integrate this up into chartparts
+    // 	this.plot.xScale = d3.scaleLinear();
+
+    // 	console.log("xScale override", this.plot.xScale);
+    // }
+
     points(){
 
 	var x = a => a[this.labelKey()];
@@ -17,6 +32,7 @@ class LineChart extends BarChart {
 		"y":y(a)
 	    }
 	});
+
     }
 
     draw(){

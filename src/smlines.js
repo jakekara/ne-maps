@@ -1,6 +1,7 @@
 // Small timeline
 
 import * as d3 from "d3";
+import * as numeral from "numeraljs";
 import { LineChart } from "./linechart.js";
 import { XYPlot  } from "./xyplot.js";
 
@@ -11,9 +12,13 @@ var colors = {
 }
 
 function drawChart(data, container){
-    console.log("Drawing chart with data", data, container);
 
     var plot = new XYPlot().container(d3.select(container)).width(85).height(85);
+    var margin = plot.margin()
+    margin.right += 3;
+    plot.margin(margin)
+
+    
 
     var lineData = function(line){
 	var y;
@@ -31,7 +36,6 @@ function drawChart(data, container){
 
     data.forEach(function(line){
 	var d = lineData(line);
-	console.log("Drawing line with data", d);
 
 	var ylim = 80;
 	var chart = new LineChart(plot)
@@ -47,9 +51,11 @@ function drawChart(data, container){
 
 	plot.xAxisGenerator = function(scale){
 	    return d3.axisBottom(scale)
+		// .tickFormat(function(d, i){
+		//     return numeral(d).format("0");
+		// })
 		.tickValues(d3.extent(scale.domain()));
 	}
-	
 
 	chart.draw();
 
@@ -59,12 +65,9 @@ function drawChart(data, container){
 	    .attr("data-race", line["race"])
 	
     })
-    
 
 }
 function drawWithData(data){
-
-    console.log("drawing with data", data);
 
     var container = d3.select("#container")
 	.append("div")
@@ -102,8 +105,6 @@ function drawWithData(data){
 	stateData[d.Geography].push(d);
     });
 
-    console.log(stateData);
-
     var boxes = smContainer.selectAll(".small-chart")
 	.data(Object.keys(stateData))
 	.enter()
@@ -138,7 +139,6 @@ function drawWithData(data){
     var plots = boxes.append("div")
 
     plots.each(function(d){
-	console.log("plots.each", d);
 	drawChart(stateData[d], this);
     });
 }
