@@ -143,3 +143,7 @@ table.dumbbell-plot td{
     box-sizing: border-box;
     text-align: center;
 }
+
+.small-chart.line-chart svg{
+    overflow: hidden;
+}

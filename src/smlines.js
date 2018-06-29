@@ -1,7 +1,7 @@
 // Small timeline
 
 import * as d3 from "d3";
-import * as numeral from "numeraljs";
+// import * as numeral from "numeraljs";
 import { LineChart } from "./linechart.js";
 import { XYPlot  } from "./xyplot.js";
 

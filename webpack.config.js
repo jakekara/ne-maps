@@ -4,7 +4,7 @@ const webpack = require('webpack');
 // 
 
 module.exports = {
-    // mode: "production",
+    mode: "production",
     // "mode":"development",
     // devtool:"source-map",
     entry: {

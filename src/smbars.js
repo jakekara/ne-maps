@@ -1,7 +1,7 @@
 // Small timeline
 
 import * as d3 from "d3";
-import * as numeral from "numeraljs";
+// import * as numeral from "numeraljs";
 import { BarChart } from "./barchart.js";
 import { XYPlot  } from "./xyplot.js";
 
@@ -27,26 +27,34 @@ function drawChart(data, container){
 	})
 	.filter(function(d){
 	    console.log("filter", d);
-	    return d["label"] in colors;
+	    var ret = d["label"] in colors;
+	    console.log("returning", ret);
+	    return ret;
 	});
+
+    console.log("making chart with data", data);
 
     var chart = new BarChart(plot)
 	.data(data);
 
     plot.yAxisGenerator = function(scale){
-	return d3.axisLeft(scale)
-	    .tickValues(d3.extent(scale.domain()))
-	    .tickFormat(function(d, i){
-
-		return numeral(d).format("0a").toUpperCase();
-		// d3.format(".1s"));
-	    });
-	// .tickValues([0, ylim/2, ylim]);
+    	return d3.axisLeft(scale)
+    	    .tickValues(d3.extent(scale.domain()))
+	    .tickFormat(d3.format(".2s"))
+    	    .tickFormat(function(d, i){
+		var fmt = ".2s";
+		if ((Number(d) < 10)) fmt = ".1s";
+		return d3.format(fmt)(d);
+	    })
+    	    // 	return numeral(d).format("0a").toUpperCase();
+    	    // 	// d3.format(".1s"));
+    	    // });
+    	// .tickValues([0, ylim/2, ylim]);
     }
 
     plot.xAxisGenerator = function(scale){
-	return d3.axisBottom(scale)
-	    .tickValues([]);
+    	return d3.axisBottom(scale)
+    	    .tickValues([]);
     }
     
     chart.draw();
