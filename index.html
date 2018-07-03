@@ -5,12 +5,108 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
   </head>
   <body>
-    <div id="container"></div>
-    <script src="js/bundle.js"></script>
-    <script src="https://pym.nprapps.org/pym.v1.min.js"></script>
+    <article>
+      <h1>HIV graphics sample</h1>
+      <p>Below are the graphical components for a story on HIV in New
+	England.</p>
+      <p>For the code behind these graphics,
+	visit <a href="https://github.com/jakekara/ne-maps">https://github.com/jakekara/ne-maps</a>. For
+	the code behind the analysis, which produced the numbers for
+	these charts,
+	visit <a href="https://github.com/jakekara/hiv-new-england">https://github.com/jakekara/hiv-new-england</a>.</p>
+
+      <p>The rest of this story is just Latin text.</p>
+
+      <p>Pellentesque habitant morbi tristique senectus et netus et
+	malesuada fames ac turpis egestas.</p>
+
+      <div id="sm-container"></div>
+
+      <p>Pellentesque habitant morbi tristique senectus et netus et
+      malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat
+      vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit
+      amet quam egestas semper. Aenean ultricies mi vitae est. Mauris
+      placerat eleifend leo.</p>
+      
+      <p>Pellentesque habitant morbi tristique senectus et netus et
+      malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat
+      vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit
+      amet quam egestas semper. Aenean ultricies mi vitae est. Mauris
+      placerat eleifend leo. Quisque sit amet est et sapien ullamcorper
+      pharetra. Vestibulum erat wisi, condimentum sed, commodo vitae,
+      ornare sit amet, wisi. Aenean fermentum, elit eget tincidunt
+      condimentum, eros ipsum rutrum orci, sagittis tempus lacus enim ac
+      dui. Donec non enim in turpis pulvinar facilisis. Ut felis. Praesent
+      dapibus, neque id cursus faucibus, tortor neque egestas augue, eu
+      vulputate magna eros eu erat. Aliquam erat volutpat. Nam dui mi,
+	tincidunt quis, accumsan porttitor, facilisis luctus, metus</p>
+      
+      <div id="prev-disp-container"></div>
+
+      <p>Pellentesque habitant morbi tristique senectus et netus et
+	malesuada fames ac turpis egestas.</p>
+
+      <p>Pellentesque habitant morbi tristique senectus et netus et
+      malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat
+      vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit
+      amet quam egestas semper. Aenean ultricies mi vitae est. Mauris
+	placerat eleifend leo.</p>
+
+      <p>Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit
+      amet, ante.</p>
+
+      <div id="small-timelines-container"></div>
+
+      <p>Pellentesque habitant morbi tristique senectus et netus et
+	malesuada fames ac turpis egestas.</p>
+
+      <p>Pellentesque habitant morbi tristique senectus et netus et
+      malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat
+      vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit
+      amet quam egestas semper. Aenean ultricies mi vitae est. Mauris
+	placerat eleifend leo.</p>
+
+      <p>Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit
+      amet, ante.</p>
+      <p>Pellentesque habitant morbi tristique senectus et netus et
+	malesuada fames ac turpis egestas.</p>
+
+      <p>Pellentesque habitant morbi tristique senectus et netus et
+      malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat
+      vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit
+      amet quam egestas semper. Aenean ultricies mi vitae est. Mauris
+	placerat eleifend leo.</p>
+
+      <p>Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit
+      amet, ante.</p>
+      <p>Pellentesque habitant morbi tristique senectus et netus et
+	malesuada fames ac turpis egestas.</p>
+
+      <p>Pellentesque habitant morbi tristique senectus et netus et
+      malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat
+      vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit
+      amet quam egestas semper. Aenean ultricies mi vitae est. Mauris
+	placerat eleifend leo.</p>
+
+      <p>Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit
+      amet, ante.</p>
+
+      <div id="small-bars-container"></div>
+    </article>
+    <script type="text/javascript"
+	    src="https://pym.nprapps.org/pym.v1.min.js"></script>
     <script>
-      var pymChild = new pym.Child({polling:500});
+      var mmap = new pym.Parent('sm-container', 'sm.html', {}); 
+      var pdisp = new pym.Parent('prev-disp-container', 'pdisp.html', {}); 
+      var smallTimline = new pym.Parent('small-timelines-container',
+      'small-timelines.html', {}); 
+      var smallBars = new pym.Parent('small-bars-container', 'small-bars.html', {});
     </script>
+    <!-- <script src="js/bundle.js"></script> -->
+    <!-- <script src="https://pym.nprapps.org/pym.v1.min.js"></script> -->
+    <!-- <script> -->
+    <!--   var pymChild = new pym.Child({polling:500}); -->
+    <!-- </script> -->
   </body>
 </html>
-  
+
