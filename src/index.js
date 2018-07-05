@@ -65,7 +65,7 @@ Promise.all([d3.json("shapes/us-2017.json"),
 	var rateExtent = d3.extent(data.map( d => Number(d[data_col]) ));
 
 	// rateExtent = [0, 500];
-	console.log("rateExtent", rateExtent);
+	// console.log("rateExtent", rateExtent);
 
 	var rateScale = d3.scaleLinear()
 	// .domain(rateExtent)
@@ -73,7 +73,8 @@ Promise.all([d3.json("shapes/us-2017.json"),
 	    .range([0,1]);
 
 	var valScale = function(val){
-	    return d3.interpolateReds(rateScale(val));
+	    return d3.interpolateBuPu(rateScale(val));
+	    // return d3.interpolateReds(rateScale(val));
 	}
 
 	var rate = function (geoid){
@@ -181,10 +182,12 @@ Promise.all([d3.json("shapes/us-2017.json"),
 	    .attr("height", legend_height / 2)
 	    .attr("x", function(v, i){ return 10 +  i * ((legend_width - 20) / legend_steps);})
 	    .style("fill", function(v, i){
-		return  d3.interpolateReds(i / legend_steps);
+		return d3.interpolateBuPu(i / legend_steps);
+		// return  d3.interpolateReds(i / legend_steps);
 	    })
 	    .style("stroke", function(v, i){
-		return  d3.interpolateReds(i / legend_steps);
+		return d3.interpolateBuPu(i / legend_steps);		
+		// return  d3.interpolateReds(i / legend_steps);
 	    });
 	
 	
