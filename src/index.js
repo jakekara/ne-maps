@@ -145,7 +145,7 @@ Promise.all([d3.json("shapes/us-2017.json"),
 		message.html("");
 		return;
 	    }
-	    message.html(countyList[0].id)// properties.NAME);
+	    // message.html(countyList[0].id)// properties.NAME);
 	    console.log(getData(countyList[0].id));
 	}, newEnglandCounties);
 
