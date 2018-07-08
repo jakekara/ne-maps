@@ -1,0 +1,10 @@
+@import url('https://fonts.googleapis.com/css?family=Lato|Merriweather:400,700');
+body {
+    font-family: 'Merriweather', serif;
+    display: flex;
+    justify-content: center;
+}
+
+article {
+    max-width: 600px;
+}

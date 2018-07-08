@@ -173,6 +173,7 @@ Promise.all([d3.json("shapes/us-2017.json"),
 
 	var legend_axis = d3.axisBottom()
 	    .scale(legend_scale)
+	    .tickSize(legend_height / 2)
 
 	var legend_rects = legend_svg.append("g").selectAll("rect")
 	    .data(d3.range(0,legend_steps))
