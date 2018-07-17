@@ -96,7 +96,8 @@ function drawWithData(data){
     var explainer = container.append("p")
 	.classed("small-text", true)
 	.text("Male-to-male sexual contact accounted for the largest portion "
-	      + " of diagnoses, compared with other manners of transmission. ")
+	      + " of diagnoses among adults and adolescents, compared with "
+	      + " other manners of transmission.")
 
     var smContainer = container.append("div")
 	.classed("small-multiple-container", true);;

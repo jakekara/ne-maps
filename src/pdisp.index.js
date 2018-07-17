@@ -19,7 +19,7 @@ d3.csv("data/bhw-prev-2015.csv")
 
 	container.append("p")
 	    .classed("small-text", true)
-	    .text("The number of people living with HIV per 100,000 population in 2015.");
+	    .text("The number of adults and adolescents living with HIV per 100,000 population in 2015.");
 
 	var dbContainer = container.append("div");
 

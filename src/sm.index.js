@@ -48,7 +48,7 @@ var drawWithData = function(args){
 
     var explainer = container.append("p")
 	.classed("small-text", true)
-	.text("HIV prevalence, the number of people living with HIV, varies "
+	.text("HIV prevalence, the number of adults and adolescents living with HIV, varies "
 	      + " starkly along racial lines. Data from 2015.");
 
     var mapBox = container.append("div")

@@ -78,7 +78,7 @@ function drawWithData(data){
 
     var explainer = container.append("p")
 	.classed("small-text", true)
-	.text("The number of people diagnosed with HIV each year "
+	.text("The number of adults and adolescents diagnosed with HIV each year "
 	      + " continues to decline but varies greatly "
 	      + " by race. The rates below are adjusted per 100,000 population. "
 	      + " The Northern New England states of Maine, New Hampshire and "
